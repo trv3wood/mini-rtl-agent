@@ -89,6 +89,28 @@ python3 -m src.rtl_skill_index --check
 
 The generated index is written to `data/rtl_skills/index.json`.
 
+Each skill directory now has this structure:
+
+```text
+data/rtl_skills/<skill>/
+  module_info.json          machine-readable metadata
+  README.md                 LLM-facing usage guide
+  template.v                minimal teaching RTL template
+  examples/instantiation.v  compact instantiation example
+  examples/tb_<skill>.v     self-checking Icarus Verilog testbench
+```
+
+Run one skill testbench manually:
+
+```sh
+iverilog -g2012 -Wall -o /tmp/uart_tx.vvp \
+  data/rtl_skills/uart_tx/template.v \
+  data/rtl_skills/uart_tx/examples/tb_uart_tx.v
+vvp /tmp/uart_tx.vvp
+```
+
+`source_refs` are provenance and learning references only. The local `template.v` files are intentionally small teaching implementations and do not copy external RTL.
+
 ## Notes
 
 This is intentionally narrow. It supports small Verilog modules and currently targets UART TX. The code is structured so a real LLM backend can replace the deterministic generator later without changing the simulator or reporting steps.

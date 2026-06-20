@@ -7,7 +7,7 @@ demo:
 	$(PYTHON) -m src.agent --spec $(SPEC)
 
 skills:
-	$(PYTHON) -m src.rtl_skill_index
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m src.rtl_skill_index --run-examples
 
 clean:
 	rm -rf work/generated work/reports
