@@ -141,7 +141,21 @@ Try the included local sample:
 make skill-builder-demo
 ```
 
+Run the external-repo smoke wrapper against a local checkout:
+
+```sh
+scripts/build_from_external_repo.sh /path/to/verilog/repo
+```
+
 The generated templates are intentionally simplified teaching implementations. They preserve interface shape and basic semantics, but they are not copied from the input project and should not be treated as production replacements.
+
+### Known Limitations
+
+- The parser is heuristic and regex/text based; it is not a full Verilog/SystemVerilog front end.
+- SystemVerilog support is partial and focused on common module headers, parameters, ports, comments, and simple pattern detection.
+- Extracted comments may be incomplete or may miss comments that are far from the module declaration.
+- Generated `template.v` files are educational and reproducible, not production-ready replacements for the source RTL.
+- `source_refs` are provenance records only; they are not runtime dependencies and the builder does not download external code.
 
 ## Notes
 

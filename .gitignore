@@ -10,3 +10,8 @@ wheels/
 .venv
 
 **/generated/
+
+# Generated skill-builder outputs
+skills/
+work/built_skills/
+work/external_skills/

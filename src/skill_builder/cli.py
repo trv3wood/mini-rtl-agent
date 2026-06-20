@@ -17,11 +17,16 @@ def main(argv: list[str] | None = None) -> int:
         default="skills",
         help="Output directory for generated skills. Defaults to ./skills.",
     )
+    build_parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Remove previously generated skill directories in the output before rebuilding.",
+    )
 
     args = parser.parse_args(argv)
     if args.command == "build":
         try:
-            report = build_skill_library(Path(args.repo_path), Path(args.output))
+            report = build_skill_library(Path(args.repo_path), Path(args.output), clean=args.clean)
         except SkillBuilderError as exc:
             print(f"ERROR: {exc}")
             return 1
@@ -34,4 +39,3 @@ def main(argv: list[str] | None = None) -> int:
             print(f"WARNING: {len(failed)} generated testbench(es) did not pass")
         return 0
     return 1
-

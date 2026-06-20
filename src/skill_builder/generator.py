@@ -7,6 +7,10 @@ from pathlib import Path
 from .models import ModuleInfo, Parameter, Port, SkillScore
 
 
+BUILDER_VERSION = "0.1.0"
+PARSER_MODE = "deterministic"
+
+
 def width_decl(width: str) -> str:
     return "" if width == "1" else f" {width}"
 
@@ -306,6 +310,12 @@ def module_info_json(module: ModuleInfo) -> str:
             "Generated testbench can instantiate the template.",
         ],
         "keywords": module.keywords,
+        "provenance": {
+            "source_file": str(module.source_path),
+            "detected_module_name": module.name,
+            "builder_version": BUILDER_VERSION,
+            "parser_mode": PARSER_MODE,
+        },
     }
     return json.dumps(data, indent=2, sort_keys=False) + "\n"
 

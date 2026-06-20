@@ -19,6 +19,7 @@ from .generator import (
 from .models import ModuleInfo
 from .parser import parse_modules
 from .scanner import scan_rtl_files
+from .schema import validate_module_info
 
 
 class SkillBuilderError(RuntimeError):
@@ -61,7 +62,13 @@ def write_skill(module: ModuleInfo, output_root: Path) -> dict:
     examples_dir = skill_dir / "examples"
     examples_dir.mkdir(parents=True, exist_ok=True)
 
-    (skill_dir / "module_info.json").write_text(module_info_json(module), encoding="utf-8")
+    module_info_text = module_info_json(module)
+    module_info = json.loads(module_info_text)
+    schema_errors = validate_module_info(module_info)
+    if schema_errors:
+        raise SkillBuilderError(f"generated module_info invalid for {module.name}: {schema_errors}")
+
+    (skill_dir / "module_info.json").write_text(module_info_text, encoding="utf-8")
     (skill_dir / "README.md").write_text(generate_readme(module), encoding="utf-8")
     (skill_dir / "template.v").write_text(generate_template(module), encoding="utf-8")
     (examples_dir / "instantiation.v").write_text(generate_instantiation(module), encoding="utf-8")
@@ -97,6 +104,8 @@ def write_skill(module: ModuleInfo, output_root: Path) -> dict:
             "template_usability": score.template_usability,
             "notes": score.notes,
         },
+        "schema_ok": not schema_errors,
+        "schema_errors": schema_errors,
         "paths": {
             "module_info": str(skill_dir / "module_info.json"),
             "readme": str(skill_dir / "README.md"),
@@ -107,11 +116,23 @@ def write_skill(module: ModuleInfo, output_root: Path) -> dict:
     }
 
 
-def build_skill_library(repo_path: Path, output_root: Path | None = None) -> dict:
+def clean_output_root(output_root: Path) -> None:
+    if not output_root.exists():
+        return
+    for child in output_root.iterdir():
+        if child.is_dir():
+            shutil.rmtree(child)
+        elif child.name == "report.json":
+            child.unlink()
+
+
+def build_skill_library(repo_path: Path, output_root: Path | None = None, clean: bool = False) -> dict:
     repo_path = repo_path.resolve()
     if not repo_path.exists() or not repo_path.is_dir():
         raise SkillBuilderError(f"repo_path is not a directory: {repo_path}")
     output_root = (output_root or (Path.cwd() / "skills")).resolve()
+    if clean:
+        clean_output_root(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
 
     rtl_files = scan_rtl_files(repo_path)
@@ -135,4 +156,3 @@ def build_skill_library(repo_path: Path, output_root: Path | None = None) -> dic
     }
     (output_root / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
-
