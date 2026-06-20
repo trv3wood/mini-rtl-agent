@@ -1,0 +1,229 @@
+{
+  "name": "i2c_master",
+  "skill_type": "module",
+  "category": "serial_bus",
+  "description": "I2C master controller with software-visible command/status registers and open-drain SCL/SDA controls.",
+  "source_refs": [
+    {
+      "project": "freecores/i2c",
+      "repository": "https://github.com/freecores/i2c",
+      "commit": "3b067f00ccced753b0502024766a51f58f3e04bc",
+      "path": "rtl/verilog/i2c_master_top.v",
+      "module": "i2c_master_top",
+      "url": "https://github.com/freecores/i2c/blob/3b067f00ccced753b0502024766a51f58f3e04bc/rtl/verilog/i2c_master_top.v",
+      "license": "BSD-like OpenCores license in source header",
+      "notes": "Wishbone top-level register wrapper for I2C master."
+    },
+    {
+      "project": "freecores/i2c",
+      "repository": "https://github.com/freecores/i2c",
+      "commit": "3b067f00ccced753b0502024766a51f58f3e04bc",
+      "path": "rtl/verilog/i2c_master_byte_ctrl.v",
+      "module": "i2c_master_byte_ctrl",
+      "url": "https://github.com/freecores/i2c/blob/3b067f00ccced753b0502024766a51f58f3e04bc/rtl/verilog/i2c_master_byte_ctrl.v",
+      "license": "BSD-like OpenCores license in source header",
+      "notes": "Byte-level I2C command controller."
+    },
+    {
+      "project": "freecores/i2c",
+      "repository": "https://github.com/freecores/i2c",
+      "commit": "3b067f00ccced753b0502024766a51f58f3e04bc",
+      "path": "rtl/verilog/i2c_master_bit_ctrl.v",
+      "module": "i2c_master_bit_ctrl",
+      "url": "https://github.com/freecores/i2c/blob/3b067f00ccced753b0502024766a51f58f3e04bc/rtl/verilog/i2c_master_bit_ctrl.v",
+      "license": "BSD-like OpenCores license in source header",
+      "notes": "Bit-level SCL/SDA sequencer and arbitration handling."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "ARST_LVL",
+      "default": "1'b1",
+      "description": "Asynchronous reset active level."
+    },
+    {
+      "name": "DEFAULT_SLAVE_ADDR",
+      "default": "7'b1111110",
+      "description": "Optional default slave address register value."
+    }
+  ],
+  "ports": [
+    {
+      "name": "wb_clk_i",
+      "direction": "input",
+      "width": 1,
+      "description": "Wishbone clock."
+    },
+    {
+      "name": "wb_rst_i",
+      "direction": "input",
+      "width": 1,
+      "description": "Wishbone synchronous reset."
+    },
+    {
+      "name": "arst_i",
+      "direction": "input",
+      "width": 1,
+      "description": "Asynchronous reset."
+    },
+    {
+      "name": "wb_adr_i",
+      "direction": "input",
+      "width": 3,
+      "description": "Register address."
+    },
+    {
+      "name": "wb_dat_i",
+      "direction": "input",
+      "width": 8,
+      "description": "Wishbone write data."
+    },
+    {
+      "name": "wb_dat_o",
+      "direction": "output",
+      "width": 8,
+      "description": "Wishbone read data."
+    },
+    {
+      "name": "wb_we_i",
+      "direction": "input",
+      "width": 1,
+      "description": "Write enable."
+    },
+    {
+      "name": "wb_stb_i",
+      "direction": "input",
+      "width": 1,
+      "description": "Strobe."
+    },
+    {
+      "name": "wb_cyc_i",
+      "direction": "input",
+      "width": 1,
+      "description": "Bus cycle valid."
+    },
+    {
+      "name": "wb_ack_o",
+      "direction": "output",
+      "width": 1,
+      "description": "Bus acknowledge."
+    },
+    {
+      "name": "wb_inta_o",
+      "direction": "output",
+      "width": 1,
+      "description": "Interrupt output."
+    },
+    {
+      "name": "scl_pad_i",
+      "direction": "input",
+      "width": 1,
+      "description": "SCL pad input."
+    },
+    {
+      "name": "scl_pad_o",
+      "direction": "output",
+      "width": 1,
+      "description": "SCL pad output value, normally 0 for open-drain drive."
+    },
+    {
+      "name": "scl_padoen_o",
+      "direction": "output",
+      "width": 1,
+      "description": "SCL output enable, active low."
+    },
+    {
+      "name": "sda_pad_i",
+      "direction": "input",
+      "width": 1,
+      "description": "SDA pad input."
+    },
+    {
+      "name": "sda_pad_o",
+      "direction": "output",
+      "width": 1,
+      "description": "SDA pad output value, normally 0 for open-drain drive."
+    },
+    {
+      "name": "sda_padoen_o",
+      "direction": "output",
+      "width": 1,
+      "description": "SDA output enable, active low."
+    }
+  ],
+  "states": [
+    {
+      "name": "IDLE",
+      "description": "Bus is free, waiting for command register start/read/write bits."
+    },
+    {
+      "name": "START",
+      "description": "Generate SDA falling edge while SCL high."
+    },
+    {
+      "name": "BIT_TRANSFER",
+      "description": "Shift address/data bits and sample ACK."
+    },
+    {
+      "name": "ACK",
+      "description": "Handle acknowledge bit in either master read or write direction."
+    },
+    {
+      "name": "STOP",
+      "description": "Release SDA high while SCL high."
+    },
+    {
+      "name": "ARBITRATION_LOST",
+      "description": "Detected mismatch on open-drain bus while trying to drive."
+    }
+  ],
+  "constraints": [
+    "SCL and SDA are open-drain style signals: drive low or release, never actively drive high.",
+    "Preserve start and stop timing relative to SCL high periods.",
+    "Expose arbitration-lost status when sampled bus state conflicts with the master drive intent.",
+    "Clear one-shot command bits when the byte controller acknowledges completion."
+  ],
+  "dependencies": [
+    "i2c_master_byte_ctrl",
+    "i2c_master_bit_ctrl",
+    "wishbone_reg_block"
+  ],
+  "interfaces": [
+    "wishbone",
+    "i2c",
+    "open_drain"
+  ],
+  "patterns": [
+    "Separate software register decode from byte-level and bit-level protocol controllers.",
+    "Model SCL/SDA as open-drain: drive low or release, never actively drive high.",
+    "Clear one-shot command bits when byte transfer completes or arbitration is lost.",
+    "Latch status bits such as rxack, transfer-in-progress, bus busy, and interrupt pending."
+  ],
+  "implementation_notes": [
+    "Keep register decode, byte controller, and bit controller as separate conceptual blocks.",
+    "Use prescale registers to derive SCL timing enables from the bus clock.",
+    "Represent command register bits for start, stop, read, write, ack, and interrupt acknowledge.",
+    "Latch status bits for rxack, bus busy, arbitration lost, transfer in progress, and interrupt pending."
+  ],
+  "test_strategy": [
+    "Write prescale/control registers through Wishbone.",
+    "Issue start/write/stop command sequence and observe SCL/SDA edges.",
+    "Inject NACK and arbitration-lost cases through pad inputs."
+  ],
+  "verification_goals": [
+    "Wishbone writes update prescale/control/command registers at the documented addresses.",
+    "A write transaction produces start, address/data bits, ACK sample, and stop in order.",
+    "SDA changes only when allowed by the I2C phase except for start/stop conditions.",
+    "Arbitration lost and NACK cases are observable through status bits."
+  ],
+  "keywords": [
+    "i2c",
+    "master",
+    "wishbone",
+    "open drain",
+    "scl",
+    "sda",
+    "arbitration",
+    "ack"
+  ]
+}

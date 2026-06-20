@@ -1,0 +1,155 @@
+{
+  "name": "wishbone_reg_block",
+  "skill_type": "module",
+  "category": "bus",
+  "description": "Small Wishbone-compatible register block with address decode, read mux, write strobes, acknowledge, and optional interrupt/status bits.",
+  "source_refs": [
+    {
+      "project": "freecores/i2c",
+      "repository": "https://github.com/freecores/i2c",
+      "commit": "3b067f00ccced753b0502024766a51f58f3e04bc",
+      "path": "rtl/verilog/i2c_master_top.v",
+      "module": "i2c_master_top",
+      "url": "https://github.com/freecores/i2c/blob/3b067f00ccced753b0502024766a51f58f3e04bc/rtl/verilog/i2c_master_top.v",
+      "license": "BSD-like OpenCores license in source header",
+      "notes": "Concrete Wishbone register decode for I2C control/status registers."
+    },
+    {
+      "project": "freecores/spi",
+      "repository": "https://github.com/freecores/spi",
+      "commit": "1b8aa4c54bd72cc9668f52aafd35698da3378098",
+      "path": "rtl/verilog/spi_top.v",
+      "module": "spi_top",
+      "url": "https://github.com/freecores/spi/blob/1b8aa4c54bd72cc9668f52aafd35698da3378098/rtl/verilog/spi_top.v",
+      "license": "OpenCores project license; verify file header before reuse",
+      "notes": "Concrete Wishbone register decode for SPI control/status registers."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "ADDR_WIDTH",
+      "default": 3,
+      "description": "Register address width."
+    },
+    {
+      "name": "DATA_WIDTH",
+      "default": 8,
+      "description": "Register data width."
+    }
+  ],
+  "ports": [
+    {
+      "name": "clk",
+      "direction": "input",
+      "width": 1,
+      "description": "Bus clock."
+    },
+    {
+      "name": "rst",
+      "direction": "input",
+      "width": 1,
+      "description": "Bus reset."
+    },
+    {
+      "name": "wb_adr_i",
+      "direction": "input",
+      "width": "ADDR_WIDTH",
+      "description": "Register address."
+    },
+    {
+      "name": "wb_dat_i",
+      "direction": "input",
+      "width": "DATA_WIDTH",
+      "description": "Write data."
+    },
+    {
+      "name": "wb_dat_o",
+      "direction": "output",
+      "width": "DATA_WIDTH",
+      "description": "Read data."
+    },
+    {
+      "name": "wb_we_i",
+      "direction": "input",
+      "width": 1,
+      "description": "Write enable."
+    },
+    {
+      "name": "wb_stb_i",
+      "direction": "input",
+      "width": 1,
+      "description": "Transfer strobe."
+    },
+    {
+      "name": "wb_cyc_i",
+      "direction": "input",
+      "width": 1,
+      "description": "Valid bus cycle."
+    },
+    {
+      "name": "wb_ack_o",
+      "direction": "output",
+      "width": 1,
+      "description": "Single-cycle acknowledge."
+    },
+    {
+      "name": "irq_o",
+      "direction": "output",
+      "width": 1,
+      "description": "Optional interrupt output."
+    }
+  ],
+  "states": [
+    {
+      "name": "IDLE",
+      "description": "No active bus transaction."
+    },
+    {
+      "name": "ACK",
+      "description": "Acknowledge the selected register access for one cycle."
+    }
+  ],
+  "constraints": [
+    "Acknowledge each accepted Wishbone transaction exactly according to the selected wait-state policy.",
+    "Writes must not overwrite read-only hardware status fields.",
+    "One-shot command bits need explicit clear behavior after hardware consumption.",
+    "Read mux must return deterministic values for reserved addresses."
+  ],
+  "dependencies": [],
+  "interfaces": [
+    "wishbone",
+    "register_file"
+  ],
+  "patterns": [
+    "Define write access as cyc & stb & we & ack or cyc & stb & we depending on wait-state policy.",
+    "Generate ack as a registered one-cycle pulse to avoid combinational bus loops.",
+    "Use a case statement for read mux and write decode.",
+    "Clear write-one-to-clear command/interrupt bits explicitly after hardware consumes them."
+  ],
+  "implementation_notes": [
+    "Derive a write-access strobe from cyc, stb, we, and the acknowledge policy.",
+    "Use a registered ack pulse to avoid combinational loops into the bus fabric.",
+    "Keep write decode and read mux in separate always/case blocks for reviewability.",
+    "Document reset values for every software-visible register."
+  ],
+  "test_strategy": [
+    "Write every register and read back writable fields.",
+    "Check read-only status fields are not overwritten by writes.",
+    "Verify ack timing for read and write cycles."
+  ],
+  "verification_goals": [
+    "Every documented writable register can be written and read back where applicable.",
+    "Read-only status fields reflect hardware inputs and ignore software writes.",
+    "ack timing is one pulse per bus access.",
+    "Command and interrupt clear bits have no unintended sticky behavior."
+  ],
+  "keywords": [
+    "wishbone",
+    "register block",
+    "address decode",
+    "ack",
+    "status",
+    "control",
+    "interrupt"
+  ]
+}

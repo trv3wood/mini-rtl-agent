@@ -1,0 +1,13 @@
+[project]
+name = "mini-rtl-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "openai>=2.43.0",
+    "pydantic>=2.13.4",
+    "pytest>=9.1.1",
+    "python-dotenv>=1.2.2",
+    "rich>=15.0.0",
+]

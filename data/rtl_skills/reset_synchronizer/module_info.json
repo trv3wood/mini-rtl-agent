@@ -1,0 +1,97 @@
+{
+  "name": "reset_synchronizer",
+  "skill_type": "primitive",
+  "category": "cdc",
+  "description": "A reset synchronizer primitive with asynchronous assertion and synchronous deassertion in the destination clock domain.",
+  "source_refs": [
+    {
+      "project": "alexforencich/verilog-axis",
+      "repository": "https://github.com/alexforencich/verilog-axis",
+      "commit": "48ff7a7e2ef782cf778d47910cf85835c64b1bce",
+      "path": "rtl/sync_reset.v",
+      "module": "sync_reset",
+      "url": "https://github.com/alexforencich/verilog-axis/blob/48ff7a7e2ef782cf778d47910cf85835c64b1bce/rtl/sync_reset.v",
+      "license": "MIT",
+      "notes": "Concrete reset synchronizer primitive with configurable synchronizer depth."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "STAGES",
+      "default": 2,
+      "description": "Number of flip-flop stages. Must be >= 2 for normal CDC use."
+    },
+    {
+      "name": "RESET_ACTIVE_LEVEL",
+      "default": 1,
+      "description": "Active level of rst_in and rst_out. 1 means active-high reset, 0 means active-low reset."
+    }
+  ],
+  "ports": [
+    {
+      "name": "clk",
+      "direction": "input",
+      "width": 1,
+      "description": "Destination clock domain."
+    },
+    {
+      "name": "rst_in",
+      "direction": "input",
+      "width": 1,
+      "description": "Incoming asynchronous or external reset."
+    },
+    {
+      "name": "rst_out",
+      "direction": "output",
+      "width": 1,
+      "description": "Reset synchronized for release in the clk domain. It uses the same active polarity as rst_in."
+    }
+  ],
+  "behavior": [
+    "When rst_in is active, rst_out becomes active immediately or through an asynchronous reset path.",
+    "When rst_in becomes inactive, the inactive value shifts through STAGES flip-flops.",
+    "rst_out deasserts only on a rising edge of clk after STAGES cycles."
+  ],
+  "constraints": [
+    "Use asynchronous assertion and synchronous deassertion.",
+    "Use at least two synchronizer stages unless the design has a documented reason.",
+    "Instantiate one reset synchronizer per destination clock domain.",
+    "Do not use this primitive to synchronize arbitrary data buses.",
+    "Do not use this primitive as a general pulse synchronizer."
+  ],
+  "dependencies": [],
+  "interfaces": [
+    "reset",
+    "cdc"
+  ],
+  "patterns": [
+    "async_assert_sync_release",
+    "multi_stage_flip_flop_synchronizer"
+  ],
+  "implementation_notes": [
+    "Parameterize polarity so rst_in and rst_out are both active-high when RESET_ACTIVE_LEVEL=1 and both active-low when RESET_ACTIVE_LEVEL=0.",
+    "Use a shift register initialized to the active reset value on assertion.",
+    "On each clk edge after deassertion, shift in the inactive reset value until rst_out releases.",
+    "Apply async_reg or equivalent synthesis attributes to the synchronizer stages when supported by the flow."
+  ],
+  "test_strategy": [
+    "Assert reset between clock edges and confirm rst_out asserts promptly.",
+    "Deassert reset between clock edges and confirm rst_out releases only on clock edges.",
+    "Check release latency equals STAGES clock cycles.",
+    "Test both active-high and active-low reset configurations if parameterized."
+  ],
+  "verification_goals": [
+    "rst_out is active whenever rst_in is active.",
+    "rst_out never deasserts except on clk rising edge.",
+    "rst_out deassertion latency matches STAGES.",
+    "rst_out polarity matches RESET_ACTIVE_LEVEL."
+  ],
+  "keywords": [
+    "reset",
+    "reset synchronizer",
+    "cdc",
+    "metastability",
+    "asynchronous assertion",
+    "synchronous deassertion"
+  ]
+}

@@ -1,0 +1,186 @@
+{
+  "name": "spi_master",
+  "skill_type": "module",
+  "category": "serial_bus",
+  "description": "SPI master that shifts words over MOSI/MISO with configurable clock polarity, phase, divider, and chip select.",
+  "source_refs": [
+    {
+      "project": "freecores/spi",
+      "repository": "https://github.com/freecores/spi",
+      "commit": "1b8aa4c54bd72cc9668f52aafd35698da3378098",
+      "path": "rtl/verilog/spi_top.v",
+      "module": "spi_top",
+      "url": "https://github.com/freecores/spi/blob/1b8aa4c54bd72cc9668f52aafd35698da3378098/rtl/verilog/spi_top.v",
+      "license": "OpenCores project license; verify file header before reuse",
+      "notes": "Wishbone-connected SPI top-level register/control wrapper."
+    },
+    {
+      "project": "freecores/spi",
+      "repository": "https://github.com/freecores/spi",
+      "commit": "1b8aa4c54bd72cc9668f52aafd35698da3378098",
+      "path": "rtl/verilog/spi_shift.v",
+      "module": "spi_shift",
+      "url": "https://github.com/freecores/spi/blob/1b8aa4c54bd72cc9668f52aafd35698da3378098/rtl/verilog/spi_shift.v",
+      "license": "OpenCores project license; verify file header before reuse",
+      "notes": "SPI shift engine."
+    },
+    {
+      "project": "freecores/spi",
+      "repository": "https://github.com/freecores/spi",
+      "commit": "1b8aa4c54bd72cc9668f52aafd35698da3378098",
+      "path": "rtl/verilog/spi_clgen.v",
+      "module": "spi_clgen",
+      "url": "https://github.com/freecores/spi/blob/1b8aa4c54bd72cc9668f52aafd35698da3378098/rtl/verilog/spi_clgen.v",
+      "license": "OpenCores project license; verify file header before reuse",
+      "notes": "SPI clock generator."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "DATA_WIDTH",
+      "default": 8,
+      "description": "Transfer word width."
+    },
+    {
+      "name": "CS_WIDTH",
+      "default": 1,
+      "description": "Number of chip-select outputs."
+    },
+    {
+      "name": "DIV_WIDTH",
+      "default": 16,
+      "description": "Clock divider width."
+    }
+  ],
+  "ports": [
+    {
+      "name": "clk",
+      "direction": "input",
+      "width": 1,
+      "description": "System clock."
+    },
+    {
+      "name": "rst",
+      "direction": "input",
+      "width": 1,
+      "description": "Reset."
+    },
+    {
+      "name": "start",
+      "direction": "input",
+      "width": 1,
+      "description": "Begin transfer."
+    },
+    {
+      "name": "tx_data",
+      "direction": "input",
+      "width": "DATA_WIDTH",
+      "description": "Data to shift out."
+    },
+    {
+      "name": "rx_data",
+      "direction": "output",
+      "width": "DATA_WIDTH",
+      "description": "Data shifted in."
+    },
+    {
+      "name": "busy",
+      "direction": "output",
+      "width": 1,
+      "description": "Transfer active."
+    },
+    {
+      "name": "done",
+      "direction": "output",
+      "width": 1,
+      "description": "One-cycle transfer complete pulse."
+    },
+    {
+      "name": "sclk",
+      "direction": "output",
+      "width": 1,
+      "description": "SPI serial clock."
+    },
+    {
+      "name": "mosi",
+      "direction": "output",
+      "width": 1,
+      "description": "Master-out serial bit."
+    },
+    {
+      "name": "miso",
+      "direction": "input",
+      "width": 1,
+      "description": "Master-in serial bit."
+    },
+    {
+      "name": "cs_n",
+      "direction": "output",
+      "width": "CS_WIDTH",
+      "description": "Active-low chip select."
+    }
+  ],
+  "states": [
+    {
+      "name": "IDLE",
+      "description": "SCLK at idle polarity, chip select inactive."
+    },
+    {
+      "name": "ASSERT_CS",
+      "description": "Select target before first clock edge."
+    },
+    {
+      "name": "TRANSFER",
+      "description": "Toggle SCLK, shift MOSI, sample MISO according to CPOL/CPHA."
+    },
+    {
+      "name": "DEASSERT_CS",
+      "description": "Finish word and release chip select."
+    }
+  ],
+  "constraints": [
+    "SCLK idle value must match CPOL.",
+    "Launch and sample edges must match CPHA for the selected mode.",
+    "Chip select must cover the complete transfer word unless continuous/burst mode is explicitly implemented.",
+    "Avoid using internally generated SCLK as a fabric clock when a clock-enable strobe is sufficient."
+  ],
+  "dependencies": [],
+  "interfaces": [
+    "spi",
+    "register_control"
+  ],
+  "patterns": [
+    "Use a divider counter to derive SCLK enable strobes rather than a generated clock when possible.",
+    "Separate launch and sample edges to support CPHA modes.",
+    "Shift TX and RX registers in opposite directions according to bit order.",
+    "Keep chip select asserted across the whole word and optionally across bursts."
+  ],
+  "implementation_notes": [
+    "Use a divider counter to generate SCLK edge enables from clk.",
+    "Keep TX and RX shift registers plus a bit counter sized for DATA_WIDTH.",
+    "Separate edge phase logic from shift register update logic to keep CPOL/CPHA clear.",
+    "Pulse done after the final sample edge and deassert busy when chip select can be released."
+  ],
+  "test_strategy": [
+    "Loop MOSI back to MISO and check rx_data equals tx_data.",
+    "Exercise CPOL/CPHA combinations on edge timing.",
+    "Check cs_n assertion window and done pulse."
+  ],
+  "verification_goals": [
+    "Loopback MOSI to MISO returns the transmitted word.",
+    "All four CPOL/CPHA modes produce expected launch/sample edge ordering.",
+    "cs_n is asserted before the first active edge and released after the final edge.",
+    "done pulses once per completed word."
+  ],
+  "keywords": [
+    "spi",
+    "master",
+    "mosi",
+    "miso",
+    "sclk",
+    "chip select",
+    "cpol",
+    "cpha",
+    "shift register"
+  ]
+}

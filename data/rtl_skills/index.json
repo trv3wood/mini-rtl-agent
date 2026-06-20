@@ -1,0 +1,274 @@
+[
+  {
+    "category": "cdc",
+    "dependencies": [
+      "reset_synchronizer"
+    ],
+    "description": "Dual-clock FIFO for crossing data between independent write and read clock domains.",
+    "has_constraints": true,
+    "has_implementation_notes": true,
+    "has_verification_goals": true,
+    "interfaces": [
+      "fifo",
+      "cdc"
+    ],
+    "keywords": [
+      "async fifo",
+      "cdc",
+      "gray code",
+      "dual clock",
+      "full",
+      "empty",
+      "synchronizer"
+    ],
+    "name": "async_fifo",
+    "path": "data/rtl_skills/async_fifo/module_info.json",
+    "skill_type": "module",
+    "source_ref_count": 3,
+    "unresolved_dependencies": []
+  },
+  {
+    "category": "streaming",
+    "dependencies": [],
+    "description": "Ready/valid one-word skid or pipeline buffer for AXI-stream-like data paths.",
+    "has_constraints": true,
+    "has_implementation_notes": true,
+    "has_verification_goals": true,
+    "interfaces": [
+      "ready_valid",
+      "axis"
+    ],
+    "keywords": [
+      "axi stream",
+      "ready valid",
+      "skid buffer",
+      "pipeline",
+      "backpressure",
+      "tvalid",
+      "tready"
+    ],
+    "name": "axis_handshake_buffer",
+    "path": "data/rtl_skills/axis_handshake_buffer/module_info.json",
+    "skill_type": "primitive",
+    "source_ref_count": 2,
+    "unresolved_dependencies": []
+  },
+  {
+    "category": "serial_bus",
+    "dependencies": [
+      "i2c_master_byte_ctrl",
+      "i2c_master_bit_ctrl",
+      "wishbone_reg_block"
+    ],
+    "description": "I2C master controller with software-visible command/status registers and open-drain SCL/SDA controls.",
+    "has_constraints": true,
+    "has_implementation_notes": true,
+    "has_verification_goals": true,
+    "interfaces": [
+      "wishbone",
+      "i2c",
+      "open_drain"
+    ],
+    "keywords": [
+      "i2c",
+      "master",
+      "wishbone",
+      "open drain",
+      "scl",
+      "sda",
+      "arbitration",
+      "ack"
+    ],
+    "name": "i2c_master",
+    "path": "data/rtl_skills/i2c_master/module_info.json",
+    "skill_type": "module",
+    "source_ref_count": 3,
+    "unresolved_dependencies": [
+      "i2c_master_byte_ctrl",
+      "i2c_master_bit_ctrl"
+    ]
+  },
+  {
+    "category": "cdc",
+    "dependencies": [],
+    "description": "A reset synchronizer primitive with asynchronous assertion and synchronous deassertion in the destination clock domain.",
+    "has_constraints": true,
+    "has_implementation_notes": true,
+    "has_verification_goals": true,
+    "interfaces": [
+      "reset",
+      "cdc"
+    ],
+    "keywords": [
+      "reset",
+      "reset synchronizer",
+      "cdc",
+      "metastability",
+      "asynchronous assertion",
+      "synchronous deassertion"
+    ],
+    "name": "reset_synchronizer",
+    "path": "data/rtl_skills/reset_synchronizer/module_info.json",
+    "skill_type": "primitive",
+    "source_ref_count": 1,
+    "unresolved_dependencies": []
+  },
+  {
+    "category": "control",
+    "dependencies": [],
+    "description": "Fair arbiter that grants one of N requesters and rotates priority after successful grant.",
+    "has_constraints": true,
+    "has_implementation_notes": true,
+    "has_verification_goals": true,
+    "interfaces": [
+      "arbiter"
+    ],
+    "keywords": [
+      "arbiter",
+      "round robin",
+      "fairness",
+      "grant",
+      "request",
+      "one hot",
+      "priority"
+    ],
+    "name": "round_robin_arbiter",
+    "path": "data/rtl_skills/round_robin_arbiter/module_info.json",
+    "skill_type": "primitive",
+    "source_ref_count": 1,
+    "unresolved_dependencies": []
+  },
+  {
+    "category": "serial_bus",
+    "dependencies": [],
+    "description": "SPI master that shifts words over MOSI/MISO with configurable clock polarity, phase, divider, and chip select.",
+    "has_constraints": true,
+    "has_implementation_notes": true,
+    "has_verification_goals": true,
+    "interfaces": [
+      "spi",
+      "register_control"
+    ],
+    "keywords": [
+      "spi",
+      "master",
+      "mosi",
+      "miso",
+      "sclk",
+      "chip select",
+      "cpol",
+      "cpha",
+      "shift register"
+    ],
+    "name": "spi_master",
+    "path": "data/rtl_skills/spi_master/module_info.json",
+    "skill_type": "module",
+    "source_ref_count": 3,
+    "unresolved_dependencies": []
+  },
+  {
+    "category": "buffering",
+    "dependencies": [],
+    "description": "Single-clock FIFO with write/read enables, full/empty flags, and optional count tracking.",
+    "has_constraints": true,
+    "has_implementation_notes": true,
+    "has_verification_goals": true,
+    "interfaces": [
+      "fifo"
+    ],
+    "keywords": [
+      "fifo",
+      "synchronous",
+      "buffer",
+      "queue",
+      "full",
+      "empty",
+      "circular pointer"
+    ],
+    "name": "sync_fifo",
+    "path": "data/rtl_skills/sync_fifo/module_info.json",
+    "skill_type": "module",
+    "source_ref_count": 3,
+    "unresolved_dependencies": []
+  },
+  {
+    "category": "serial",
+    "dependencies": [],
+    "description": "UART receiver that detects a start bit, samples serial data near bit centers, and emits received words with error flags.",
+    "has_constraints": true,
+    "has_implementation_notes": true,
+    "has_verification_goals": true,
+    "interfaces": [
+      "uart",
+      "ready_valid"
+    ],
+    "keywords": [
+      "uart",
+      "rx",
+      "receiver",
+      "serial",
+      "baud",
+      "frame error",
+      "overrun",
+      "ready valid"
+    ],
+    "name": "uart_rx",
+    "path": "data/rtl_skills/uart_rx/module_info.json",
+    "skill_type": "module",
+    "source_ref_count": 1,
+    "unresolved_dependencies": []
+  },
+  {
+    "category": "serial",
+    "dependencies": [],
+    "description": "UART transmitter that accepts a byte or stream word and emits start, data, and stop bits on a serial tx line.",
+    "has_constraints": true,
+    "has_implementation_notes": true,
+    "has_verification_goals": true,
+    "interfaces": [
+      "uart",
+      "ready_valid"
+    ],
+    "keywords": [
+      "uart",
+      "tx",
+      "transmitter",
+      "serial",
+      "baud",
+      "start bit",
+      "stop bit",
+      "ready valid"
+    ],
+    "name": "uart_tx",
+    "path": "data/rtl_skills/uart_tx/module_info.json",
+    "skill_type": "module",
+    "source_ref_count": 2,
+    "unresolved_dependencies": []
+  },
+  {
+    "category": "bus",
+    "dependencies": [],
+    "description": "Small Wishbone-compatible register block with address decode, read mux, write strobes, acknowledge, and optional interrupt/status bits.",
+    "has_constraints": true,
+    "has_implementation_notes": true,
+    "has_verification_goals": true,
+    "interfaces": [
+      "wishbone",
+      "register_file"
+    ],
+    "keywords": [
+      "wishbone",
+      "register block",
+      "address decode",
+      "ack",
+      "status",
+      "control",
+      "interrupt"
+    ],
+    "name": "wishbone_reg_block",
+    "path": "data/rtl_skills/wishbone_reg_block/module_info.json",
+    "skill_type": "module",
+    "source_ref_count": 2,
+    "unresolved_dependencies": []
+  }
+]

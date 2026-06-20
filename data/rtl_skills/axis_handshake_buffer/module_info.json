@@ -1,0 +1,139 @@
+{
+  "name": "axis_handshake_buffer",
+  "skill_type": "primitive",
+  "category": "streaming",
+  "description": "Ready/valid one-word skid or pipeline buffer for AXI-stream-like data paths.",
+  "source_refs": [
+    {
+      "project": "alexforencich/verilog-axis",
+      "repository": "https://github.com/alexforencich/verilog-axis",
+      "commit": "48ff7a7e2ef782cf778d47910cf85835c64b1bce",
+      "path": "rtl/axis_register.v",
+      "module": "axis_register",
+      "url": "https://github.com/alexforencich/verilog-axis/blob/48ff7a7e2ef782cf778d47910cf85835c64b1bce/rtl/axis_register.v",
+      "license": "MIT",
+      "notes": "Ready/valid AXI-stream register, including simple/skid style buffering."
+    },
+    {
+      "project": "alexforencich/verilog-uart",
+      "repository": "https://github.com/alexforencich/verilog-uart",
+      "commit": "1b867e53af738e4a8bc7c839ca2f1c07f40382dc",
+      "path": "rtl/uart_tx.v",
+      "module": "uart_tx",
+      "url": "https://github.com/alexforencich/verilog-uart/blob/1b867e53af738e4a8bc7c839ca2f1c07f40382dc/rtl/uart_tx.v",
+      "license": "MIT",
+      "notes": "Small ready/valid producer-consumer boundary in UART transmitter."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "DATA_WIDTH",
+      "default": 8,
+      "description": "Stream payload width."
+    },
+    {
+      "name": "REG_TYPE",
+      "default": "skid",
+      "description": "Implementation style: bypass, simple, or skid."
+    }
+  ],
+  "ports": [
+    {
+      "name": "clk",
+      "direction": "input",
+      "width": 1,
+      "description": "Clock."
+    },
+    {
+      "name": "rst",
+      "direction": "input",
+      "width": 1,
+      "description": "Reset valid storage."
+    },
+    {
+      "name": "s_axis_tdata",
+      "direction": "input",
+      "width": "DATA_WIDTH",
+      "description": "Input payload."
+    },
+    {
+      "name": "s_axis_tvalid",
+      "direction": "input",
+      "width": 1,
+      "description": "Input valid."
+    },
+    {
+      "name": "s_axis_tready",
+      "direction": "output",
+      "width": 1,
+      "description": "Input ready."
+    },
+    {
+      "name": "m_axis_tdata",
+      "direction": "output",
+      "width": "DATA_WIDTH",
+      "description": "Output payload."
+    },
+    {
+      "name": "m_axis_tvalid",
+      "direction": "output",
+      "width": 1,
+      "description": "Output valid."
+    },
+    {
+      "name": "m_axis_tready",
+      "direction": "input",
+      "width": 1,
+      "description": "Output ready."
+    }
+  ],
+  "behavior": [
+    "Input transfers occur only when s_axis_tvalid and s_axis_tready are high on the same rising clock edge.",
+    "Output transfers occur only when m_axis_tvalid and m_axis_tready are high on the same rising clock edge.",
+    "Buffered payload and valid state are held stable while output valid is high and output ready is low.",
+    "The buffer may bypass data when input and output handshakes occur in the same cycle."
+  ],
+  "constraints": [
+    "Do not drop valid data under downstream backpressure.",
+    "Do not change m_axis_tdata while m_axis_tvalid is high and m_axis_tready is low.",
+    "Avoid combinational ready/valid loops across module boundaries unless explicitly designed as bypass logic.",
+    "Use skid storage when downstream ready can deassert after upstream has already observed ready."
+  ],
+  "dependencies": [],
+  "interfaces": [
+    "ready_valid",
+    "axis"
+  ],
+  "patterns": [
+    "A transfer occurs only when valid and ready are both high on the same clock edge.",
+    "Hold tdata stable while tvalid is high and tready is low.",
+    "Compute input ready from output ready or buffer vacancy.",
+    "Use skid storage when downstream ready can deassert late."
+  ],
+  "implementation_notes": [
+    "Implement at least one data register and one valid register for the simple-buffer form.",
+    "Compute s_axis_tready from buffer vacancy or output acceptance.",
+    "For skid mode, add temporary storage so a late ready deassertion does not lose the accepted word.",
+    "Keep sideband signals, if any, registered with the same enable as tdata."
+  ],
+  "test_strategy": [
+    "Randomize source valid and sink ready.",
+    "Scoreboard payload order and losslessness.",
+    "Assert data stability under backpressure."
+  ],
+  "verification_goals": [
+    "All accepted input payloads appear at the output exactly once and in order.",
+    "m_axis_tdata remains stable during backpressure.",
+    "s_axis_tready deasserts when the buffer cannot accept another word.",
+    "Bypass cycles do not duplicate or skip payloads."
+  ],
+  "keywords": [
+    "axi stream",
+    "ready valid",
+    "skid buffer",
+    "pipeline",
+    "backpressure",
+    "tvalid",
+    "tready"
+  ]
+}
