@@ -111,6 +111,38 @@ vvp /tmp/uart_tx.vvp
 
 `source_refs` are provenance and learning references only. The local `template.v` files are intentionally small teaching implementations and do not copy external RTL.
 
+## Automated RTL Skill Builder
+
+The deterministic builder converts a local Verilog/SystemVerilog repository into reusable skill packages without LLM calls:
+
+```sh
+python3 -m skill_builder build <repo_path>
+```
+
+By default it writes to `./skills`. Use `--output` to choose another directory:
+
+```sh
+python3 -m skill_builder build work/sample_rtl_repo --output work/built_skills
+```
+
+Pipeline:
+
+- Recursively scans for `*.v` and `*.sv`.
+- Ignores docs, images, build outputs, simulation outputs, and generated artifacts.
+- Extracts module names, parameters, ports, comments, likely FSM states, and common patterns.
+- Classifies skills by category, interfaces, keywords, and design patterns.
+- Emits `module_info.json`, LLM-facing `README.md`, educational `template.v`, `examples/instantiation.v`, and `examples/tb_<module>.v`.
+- Runs generated testbenches with `iverilog -g2012` and `vvp` when available.
+- Writes `report.json` with per-skill quality scores across metadata, interface, documentation, verification, and template usability.
+
+Try the included local sample:
+
+```sh
+make skill-builder-demo
+```
+
+The generated templates are intentionally simplified teaching implementations. They preserve interface shape and basic semantics, but they are not copied from the input project and should not be treated as production replacements.
+
 ## Notes
 
 This is intentionally narrow. It supports small Verilog modules and currently targets UART TX. The code is structured so a real LLM backend can replace the deterministic generator later without changing the simulator or reporting steps.
