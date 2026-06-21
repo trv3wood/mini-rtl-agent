@@ -91,6 +91,40 @@ vvp /tmp/uart_tx.vvp
 
 `source_refs` are provenance and learning references only. The local `template.v` files are intentionally small teaching implementations and do not copy external RTL.
 
+## Skill Retriever
+
+The skill retriever is designed for an LLM agent workflow. The LLM agent rewrites a natural-language request into `query_plan.json`; this repository only performs deterministic retrieval and ranking from that plan.
+
+Example `query_plan.json`:
+
+```json
+{
+  "intent": "fair arbiter with acknowledge",
+  "positive_terms": ["fair", "arbiter", "grant", "request", "acknowledge"],
+  "negative_terms": [],
+  "likely_categories": ["control"],
+  "likely_interfaces": ["arbiter"],
+  "required_features": ["acknowledge", "round_robin"]
+}
+```
+
+Run the retriever:
+
+```sh
+python3 -m skill_retriever search query_plan.json --skills-root data/rtl_skills
+python3 -m skill_retriever search query_plan.json --skills-root data/rtl_skills --format json
+```
+
+The retriever:
+
+- Uses `positive_terms` with `ripgrep`.
+- Loads matched `module_info.json` files.
+- Scores category, interfaces, patterns, ports, parameters, constraints, keywords, and README matches.
+- Penalizes `negative_terms`.
+- Returns ranked skills with `why_matched` and `penalties`.
+
+LangChain integration is exposed as a tool named `retrieve_rtl_skills`. The tool accepts the same query-plan fields plus optional `skills_root` and `limit`. It does not call an LLM and does not let the model choose the final skill.
+
 ## Automated RTL Skill Builder
 
 The deterministic builder converts a local Verilog/SystemVerilog repository into reusable skill packages without LLM calls:
