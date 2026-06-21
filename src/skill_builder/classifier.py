@@ -1,79 +1,84 @@
 from __future__ import annotations
 
+from typing import Any
+
+from src.utils.llm import ChatClient
+
 from .models import ModuleInfo
 
 
-PATTERN_RULES = {
-    "fifo": ("fifo", "queue", "full", "empty", "wr_ptr", "rd_ptr"),
-    "arbiter": ("arbiter", "grant", "request", "round_robin", "priority"),
-    "synchronizer": ("sync", "synchronizer", "cdc", "async_reg", "gray"),
-    "pipeline": ("pipeline", "stage", "valid_reg", "pipe"),
-    "handshake": ("ready", "valid", "tready", "tvalid"),
-    "counter": ("counter", "count", "cnt"),
-    "state machine": ("state", "fsm", "case (state", "case(state"),
-    "uart": ("uart", "baud", "txd", "rxd"),
-    "spi": ("spi", "sclk", "mosi", "miso", "cs_n"),
-    "axi": ("axi", "axis", "tdata", "tvalid", "tready"),
-    "memory": ("ram", "mem", "memory", "addr", "we"),
-    "cache": ("cache", "tag", "line", "miss", "hit"),
-}
+REQUIRED_CLASSIFICATION_FIELDS = {"category", "interfaces", "patterns", "keywords"}
 
 
-CATEGORY_PRIORITY = (
-    ("fifo", "buffering"),
-    ("uart", "serial"),
-    ("spi", "serial_bus"),
-    ("axi", "bus"),
-    ("arbiter", "control"),
-    ("synchronizer", "cdc"),
-    ("memory", "memory"),
-    ("cache", "memory"),
-    ("handshake", "streaming"),
-    ("pipeline", "datapath"),
-    ("counter", "control"),
-    ("state machine", "control"),
-)
-
-
-def classify(module: ModuleInfo) -> ModuleInfo:
-    haystack = " ".join(
+def classify(module: ModuleInfo, llm: ChatClient) -> ModuleInfo:
+    payload = llm.complete_json(
         [
-            module.name,
-            module.source_path.name,
-            module.source_text[:4000],
-            " ".join(port.name for port in module.ports),
-        ]
-    ).lower()
-    patterns = []
-    for pattern, hints in PATTERN_RULES.items():
-        if any(hint in haystack for hint in hints):
-            patterns.append(pattern)
-    if module.states and "state machine" not in patterns:
-        patterns.append("state machine")
-
-    category = "rtl"
-    for pattern, candidate in CATEGORY_PRIORITY:
-        if pattern in patterns:
-            category = candidate
-            break
-
-    interfaces = []
-    for name in ("axi", "uart", "spi", "fifo", "cdc", "ready_valid", "memory"):
-        if name == "ready_valid":
-            if "handshake" in patterns:
-                interfaces.append(name)
-        elif name == "cdc":
-            if "synchronizer" in patterns:
-                interfaces.append(name)
-        elif name in patterns:
-            interfaces.append(name)
-    if not interfaces:
-        interfaces.append("rtl")
-
-    keywords = sorted(set(patterns + [category] + interfaces + module.name.lower().split("_")))
-    module.patterns = patterns
-    module.category = category
-    module.interfaces = interfaces
-    module.keywords = keywords
+            {
+                "role": "system",
+                "content": (
+                    "You classify extracted Verilog/SystemVerilog modules for an RTL skill library. "
+                    "Return only JSON with exactly these fields: category, interfaces, patterns, keywords. "
+                    "Each field except category must be a list of short strings. "
+                    "Base the classification on the module name, ports, parameters, comments, states, and source excerpt."
+                ),
+            },
+            {
+                "role": "user",
+                "content": module_context(module),
+            },
+        ],
+        temperature=0.0,
+    )
+    classification = validate_classification(payload)
+    module.category = classification["category"]
+    module.interfaces = classification["interfaces"]
+    module.patterns = classification["patterns"]
+    module.keywords = classification["keywords"]
     return module
 
+
+def module_context(module: ModuleInfo) -> str:
+    ports = [
+        {
+            "name": port.name,
+            "direction": port.direction,
+            "width": port.width,
+        }
+        for port in module.ports
+    ]
+    params = [{"name": param.name, "default": param.default} for param in module.parameters]
+    return str(
+        {
+            "name": module.name,
+            "source_path": str(module.source_path),
+            "parameters": params,
+            "ports": ports,
+            "comments": module.comments,
+            "states": module.states,
+            "source_excerpt": module.source_text[:4000],
+        }
+    )
+
+
+def validate_classification(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise RuntimeError("classification response must be a JSON object")
+    missing = REQUIRED_CLASSIFICATION_FIELDS - payload.keys()
+    if missing:
+        raise RuntimeError(f"classification response missing fields: {', '.join(sorted(missing))}")
+    category = payload["category"]
+    if not isinstance(category, str) or not category:
+        raise RuntimeError("classification.category must be a non-empty string")
+    return {
+        "category": category,
+        "interfaces": require_string_list(payload, "interfaces"),
+        "patterns": require_string_list(payload, "patterns"),
+        "keywords": require_string_list(payload, "keywords"),
+    }
+
+
+def require_string_list(payload: dict[str, Any], field: str) -> list[str]:
+    value = payload[field]
+    if not isinstance(value, list):
+        raise RuntimeError(f"classification.{field} must be a list")
+    return [str(item) for item in value]

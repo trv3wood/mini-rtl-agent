@@ -7,7 +7,7 @@ from typing import Any
 
 from src.architecture.mermaid import generate_mermaid
 from src.architecture.planner import plan_architecture, validate_architecture, write_architecture_outputs
-from src.architecture.skill_mapper import map_node_to_skill_category
+from src.architecture.skill_mapper import validate_skill_mapping
 
 
 class FakeArchitectureLLM:
@@ -17,8 +17,21 @@ class FakeArchitectureLLM:
 
     def complete_json(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> dict[str, Any]:
         self.messages.append(messages)
-        assert "architecture planner" in messages[0]["content"]
-        return self.payload
+        system = messages[0]["content"]
+        if "architecture planner" in system:
+            return self.payload
+        if "skill mapper" in system:
+            return {
+                "mappings": [
+                    {
+                        "name": submodule["name"],
+                        "skill_category": f"llm_{submodule['name'].lower()}",
+                        "why": "fake LLM mapping",
+                    }
+                    for submodule in self.payload["submodules"]
+                ]
+            }
+        raise AssertionError(f"unexpected JSON prompt: {system}")
 
     def complete_text(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> str:
         raise AssertionError("architecture planner should request JSON, not text")
@@ -178,8 +191,10 @@ def test_uart_receiver_with_fifo_architecture_contains_required_blocks() -> None
     assert {"UART_RX", "FIFO", "Controller"}.issubset(names(architecture))
     assert any(connection["from"] == "UART_RX" and connection["to"] == "FIFO" for connection in architecture["connections"])
     fifo = next(item for item in architecture["submodules"] if item["name"] == "FIFO")
-    assert fifo["skill_category"] == "fifo"
+    assert fifo["skill_category"] == "llm_fifo"
+    assert fifo["skill_mapping_reason"] == "fake LLM mapping"
     assert "Design a UART receiver" in llm.messages[0][1]["content"]
+    assert "skill_taxonomy" in llm.messages[1][1]["content"]
 
 
 def test_fft4_architecture_contains_required_blocks_and_dependencies() -> None:
@@ -198,8 +213,8 @@ def test_simple_dma_architecture_maps_fifo_and_arbiter() -> None:
     assert architecture["top_module"] == "simple_dma_engine"
     assert {"DMA_Controller", "Address_Generator", "FIFO_Buffer", "Bus_Arbiter"}.issubset(names(architecture))
     mapped = {item["name"]: item["skill_category"] for item in architecture["submodules"]}
-    assert mapped["FIFO_Buffer"] == "fifo"
-    assert mapped["Bus_Arbiter"] == "arbiter"
+    assert mapped["FIFO_Buffer"] == "llm_fifo_buffer"
+    assert mapped["Bus_Arbiter"] == "llm_bus_arbiter"
 
 
 def test_non_demo_requirement_is_llm_planned_not_fixed_example_limited() -> None:
@@ -274,8 +289,10 @@ def test_validate_architecture_rejects_unknown_connection_target() -> None:
         raise AssertionError("expected validation failure")
 
 
-def test_skill_mapper_basic_categories() -> None:
-    assert map_node_to_skill_category("FIFO Buffer") == "fifo"
-    assert map_node_to_skill_category("State Controller") == "fsm"
-    assert map_node_to_skill_category("Clock Crossing Unit", "CDC synchronizer") == "synchronizer"
-    assert map_node_to_skill_category("Bus Arbitration") == "arbiter"
+def test_validate_skill_mapping_rejects_missing_submodule() -> None:
+    try:
+        validate_skill_mapping({"mappings": []}, ["FIFO"])
+    except RuntimeError as exc:
+        assert "missing submodules" in str(exc)
+    else:
+        raise AssertionError("expected skill mapping validation failure")

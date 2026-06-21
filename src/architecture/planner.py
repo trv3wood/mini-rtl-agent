@@ -7,7 +7,7 @@ from typing import Any
 from src.utils.llm import ChatClient, OpenAICompatibleLLM
 
 from .mermaid import generate_mermaid
-from .skill_mapper import annotate_submodule
+from .skill_mapper import annotate_architecture_skills
 from .spec_generator import generate_architecture_markdown, write_module_specs
 
 
@@ -40,7 +40,7 @@ def plan_architecture(requirement: str, *, llm: ChatClient | None = None) -> dic
                     "top_module, submodules, connections, notes. "
                     "Each submodule must include: name, purpose, inputs, outputs, constraints, dependencies, patterns. "
                     "Each connection must include: from, to, signal. "
-                    "Use concise module names suitable for RTL, such as UART_RX, FIFO, Controller, Butterfly. "
+                    "Use concise RTL-style module names without spaces. "
                     "Do not emit RTL code."
                 ),
             },
@@ -49,8 +49,7 @@ def plan_architecture(requirement: str, *, llm: ChatClient | None = None) -> dic
         temperature=0.1,
     )
     architecture = validate_architecture(payload)
-    architecture["submodules"] = [annotate_submodule(item) for item in architecture["submodules"]]
-    return architecture
+    return annotate_architecture_skills(architecture, llm=active_llm)
 
 
 def write_architecture_outputs(

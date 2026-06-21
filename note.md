@@ -14,11 +14,11 @@ The repository now has four related flows:
 2. An RTL Skill Builder:
    - CLI: `python3 -m skill_builder build <repo_path>`.
    - Optional clean rebuild: `--clean`.
-   - Deterministic parsing only; no LLM calls.
+   - Deterministic parsing and file extraction.
+   - LLM-based module classification for category, interfaces, keywords, and patterns.
    - Scans `.v` and `.sv` files.
    - Ignores docs, images, build outputs, generated files, and test outputs.
    - Extracts module names, parameters, ports, nearby comments, simple FSM hints, and common design patterns.
-   - Classifies category, interfaces, keywords, and patterns.
    - Generates skill packages:
 
 ```text
@@ -88,7 +88,7 @@ The architecture schema is intentionally simple and downstream-friendly:
 }
 ```
 
-Each submodule is annotated with a likely skill category such as `fifo`, `fsm`, `uart`, `arbiter`, `synchronizer`, `rom`, `multiplier`, or `dsp`.
+Each submodule is annotated by a second LLM call that maps nodes onto the current skill taxonomy loaded from `skills/index.json`.
 
 ## Hardening Added
 
@@ -215,7 +215,7 @@ These failures are useful signal: the smoke test is exposing the current determi
 - Non-ANSI and ANSI module headers are covered by tests, but complex generate blocks, interfaces, packages, macros, typedefs, modports, and parameter types remain weak spots.
 - Comment extraction is local and may miss design intent far away from the module declaration.
 - FSM detection is shallow. It catches common symbolic state names and `case(state)` style patterns, but it is not semantic analysis.
-- Pattern classification is keyword based. It can over-classify or miss modules with unusual naming.
+- Builder classification is LLM-based. It can vary by provider/model and should be reviewed before treating generated skill metadata as authoritative.
 - `template.v` preserves interface shape and provides a synthesizable educational stub. It is not a behaviorally equivalent implementation of the source RTL.
 - Generated self-checking testbenches prove that the generated template compiles and runs, not that it matches the original module behavior.
 - Complex modules such as async FIFOs, AXIS adapters, bus master models, and LFSRs currently need pattern-specific template/testbench generators.
@@ -224,7 +224,7 @@ These failures are useful signal: the smoke test is exposing the current determi
 - The LLM HDL agent currently performs syntax checking only. It does not yet auto-run the selected skill's self-checking testbench against generated HDL.
 - HDL generation is strongly grounded by the selected skill template. This is useful for demo stability, but it means the output may look close to the template unless the request forces customization.
 - Real provider calls require a local `.env` or exported `LLM_*` variables. `.env` is ignored by git; `.env.example` is commit-safe.
-- Architecture planning now depends on LLM quality. The code validates structure and exports artifacts, but it does not guarantee stable decompositions across providers or prompts.
+- Architecture planning and skill mapping now depend on LLM quality. The code validates structure and exports artifacts, but it does not guarantee stable decompositions or mappings across providers or prompts.
 - Architecture specs are intended as future RTL-generation inputs; no multi-module RTL orchestration is implemented yet.
 
 ## Suggested Next Steps

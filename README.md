@@ -182,11 +182,11 @@ The output schema is:
 }
 ```
 
-Code still annotates each LLM-produced submodule with a likely skill category such as `fifo`, `fsm`, `uart`, `arbiter`, `synchronizer`, `rom`, `multiplier`, or `dsp`.
+The planner makes a second LLM call to map each LLM-produced submodule onto the current skill taxonomy loaded from `skills/index.json`.
 
 ## Automated RTL Skill Builder
 
-The deterministic builder converts a local Verilog/SystemVerilog repository into reusable skill packages without LLM calls:
+The builder converts a local Verilog/SystemVerilog repository into reusable skill packages. Parsing and file extraction are deterministic; module classification is an LLM call that returns structured `category`, `interfaces`, `patterns`, and `keywords`.
 
 ```sh
 python3 -m skill_builder build <repo_path>
@@ -203,7 +203,7 @@ Pipeline:
 - Recursively scans for `*.v` and `*.sv`.
 - Ignores docs, images, build outputs, simulation outputs, and generated artifacts.
 - Extracts module names, parameters, ports, comments, likely FSM states, and common patterns.
-- Classifies skills by category, interfaces, keywords, and design patterns.
+- Classifies skills by category, interfaces, keywords, and design patterns through the configured LLM.
 - Emits `module_info.json`, LLM-facing `README.md`, educational `template.v`, `examples/instantiation.v`, and `examples/tb_<module>.v`.
 - Runs generated testbenches with `iverilog -g2012` and `vvp` when available.
 - Writes `report.json` with per-skill quality scores across metadata, interface, documentation, verification, and template usability.
@@ -225,6 +225,7 @@ The generated templates are intentionally simplified teaching implementations. T
 ### Known Limitations
 
 - The parser is heuristic and regex/text based; it is not a full Verilog/SystemVerilog front end.
+- Builder classification and architecture skill mapping depend on the configured LLM and can vary by provider/model.
 - SystemVerilog support is partial and focused on common module headers, parameters, ports, comments, and simple pattern detection.
 - Extracted comments may be incomplete or may miss comments that are far from the module declaration.
 - Generated `template.v` files are educational and reproducible, not production-ready replacements for the source RTL.
@@ -232,4 +233,4 @@ The generated templates are intentionally simplified teaching implementations. T
 
 ## Notes
 
-This is intentionally narrow. It supports small Verilog modules and currently targets UART TX. The code is structured so a real LLM backend can replace the deterministic generator later without changing the simulator or reporting steps.
+This is intentionally narrow. It supports small Verilog modules and currently targets UART TX for the HDL-generation demo. The simulator and reporting steps remain separate from the LLM-facing planning/generation layers.

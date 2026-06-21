@@ -10,6 +10,41 @@ from src.skill_builder.parser import parse_modules
 from src.skill_builder.schema import validate_module_info
 
 
+class FakeClassifierLLM:
+    def complete_json(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> dict:
+        prompt = messages[-1]["content"].lower()
+        if "fifo" in prompt:
+            return {
+                "category": "buffering",
+                "interfaces": ["fifo"],
+                "patterns": ["fifo"],
+                "keywords": ["fifo", "buffering"],
+            }
+        if "round_robin" in prompt or "arbiter" in prompt:
+            return {
+                "category": "control",
+                "interfaces": ["arbiter"],
+                "patterns": ["arbiter"],
+                "keywords": ["arbiter", "control"],
+            }
+        if "reset" in prompt or "sync" in prompt:
+            return {
+                "category": "cdc",
+                "interfaces": ["cdc"],
+                "patterns": ["synchronizer"],
+                "keywords": ["synchronizer", "cdc"],
+            }
+        return {
+            "category": "control",
+            "interfaces": ["rtl"],
+            "patterns": ["counter"],
+            "keywords": ["counter", "control"],
+        }
+
+    def complete_text(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> str:
+        raise AssertionError("skill classifier should request JSON, not text")
+
+
 def write(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
@@ -115,7 +150,7 @@ module second(input wire clk, output wire done); endmodule
 def test_malformed_file_does_not_crash_builder(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     write(repo / "rtl" / "broken.v", "module broken(input wire clk\n")
-    report = build_skill_library(repo, tmp_path / "skills", clean=True)
+    report = build_skill_library(repo, tmp_path / "skills", clean=True, llm=FakeClassifierLLM())
     assert report["rtl_files_scanned"] == 1
     assert report["modules_extracted"] == 0
     assert report["skills_generated"] == 0
@@ -131,7 +166,7 @@ def test_module_info_schema_reports_missing_required_fields() -> None:
 def test_sample_repo_golden_output(tmp_path: Path) -> None:
     repo = Path("work/sample_rtl_repo")
     output = tmp_path / "skills"
-    report = build_skill_library(repo, output, clean=True)
+    report = build_skill_library(repo, output, clean=True, llm=FakeClassifierLLM())
 
     assert report["skills_generated"] == 4
     assert (output / "report.json").exists()
@@ -162,6 +197,6 @@ def test_clean_removes_previous_skill_directories(tmp_path: Path) -> None:
     stale.mkdir(parents=True)
     (stale / "old.txt").write_text("old", encoding="utf-8")
 
-    build_skill_library(repo, output, clean=True)
+    build_skill_library(repo, output, clean=True, llm=FakeClassifierLLM())
     assert not stale.exists()
     assert (output / "one" / "module_info.json").exists()

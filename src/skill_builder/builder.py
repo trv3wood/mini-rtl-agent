@@ -6,6 +6,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from src.utils.llm import ChatClient, OpenAICompatibleLLM
+
 from .classifier import classify
 from .generator import (
     generate_instantiation,
@@ -126,7 +128,12 @@ def clean_output_root(output_root: Path) -> None:
             child.unlink()
 
 
-def build_skill_library(repo_path: Path, output_root: Path | None = None, clean: bool = False) -> dict:
+def build_skill_library(
+    repo_path: Path,
+    output_root: Path | None = None,
+    clean: bool = False,
+    llm: ChatClient | None = None,
+) -> dict:
     repo_path = repo_path.resolve()
     if not repo_path.exists() or not repo_path.is_dir():
         raise SkillBuilderError(f"repo_path is not a directory: {repo_path}")
@@ -138,10 +145,14 @@ def build_skill_library(repo_path: Path, output_root: Path | None = None, clean:
     rtl_files = scan_rtl_files(repo_path)
     modules: list[ModuleInfo] = []
     parse_errors = []
+    active_llm = llm
     for rtl_file in rtl_files:
         try:
-            modules.extend(classify(module) for module in parse_modules(rtl_file))
-        except Exception as exc:  # deterministic builder should report and continue
+            parsed_modules = parse_modules(rtl_file)
+            if parsed_modules and active_llm is None:
+                active_llm = OpenAICompatibleLLM()
+            modules.extend(classify(module, active_llm) for module in parsed_modules)
+        except Exception as exc:
             parse_errors.append({"path": str(rtl_file), "error": str(exc)})
 
     skills = [write_skill(module, output_root) for module in modules]
