@@ -29,14 +29,14 @@ vvp -V
 
 ```text
 src/                  Python implementation
-data/rtl_skills/      Structured RTL design pattern skills
+skills/               Structured RTL design pattern skills
 work/generated/       Generated RTL, testbench, and simulation artifacts
 work/reports/         Markdown report
 ```
 
 ## RTL Skill Library
 
-The repository includes a small verification-oriented RTL reference library under `data/rtl_skills/`. Each skill is a compact `module_info.json` extracted from open-source RTL design patterns, such as UART TX/RX, FIFO, CDC, I2C, SPI, Wishbone register blocks, ready/valid buffers, and arbitration.
+The repository includes a small verification-oriented RTL reference library under `skills/`. Each skill is a compact `module_info.json` extracted from open-source RTL design patterns, such as UART TX/RX, FIFO, CDC, I2C, SPI, Wishbone register blocks, ready/valid buffers, and arbitration.
 
 Metadata convention:
 
@@ -67,12 +67,12 @@ make skills
 python3 -m src.rtl_skill_index --check
 ```
 
-The generated index is written to `data/rtl_skills/index.json`.
+The generated index is written to `skills/index.json`.
 
 Each skill directory now has this structure:
 
 ```text
-data/rtl_skills/<skill>/
+skills/<skill>/
   module_info.json          machine-readable metadata
   README.md                 LLM-facing usage guide
   template.v                minimal teaching RTL template
@@ -84,8 +84,8 @@ Run one skill testbench manually:
 
 ```sh
 iverilog -g2012 -Wall -o /tmp/uart_tx.vvp \
-  data/rtl_skills/uart_tx/template.v \
-  data/rtl_skills/uart_tx/examples/tb_uart_tx.v
+  skills/uart_tx/template.v \
+  skills/uart_tx/examples/tb_uart_tx.v
 vvp /tmp/uart_tx.vvp
 ```
 
@@ -111,8 +111,8 @@ Example `query_plan.json`:
 Run the retriever:
 
 ```sh
-python3 -m skill_retriever search query_plan.json --skills-root data/rtl_skills
-python3 -m skill_retriever search query_plan.json --skills-root data/rtl_skills --format json
+python3 -m skill_retriever search query_plan.json
+python3 -m skill_retriever search query_plan.json --format json
 ```
 
 The retriever:
@@ -133,7 +133,7 @@ The deterministic builder converts a local Verilog/SystemVerilog repository into
 python3 -m skill_builder build <repo_path>
 ```
 
-By default it writes to `./skills`. Use `--output` to choose another directory:
+By default it writes to `./work/built_skills`, which is ignored by git. Use `--output` to choose another directory:
 
 ```sh
 python3 -m skill_builder build work/sample_rtl_repo --output work/built_skills

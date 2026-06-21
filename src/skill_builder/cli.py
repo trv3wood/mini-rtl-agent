@@ -14,8 +14,8 @@ def main(argv: list[str] | None = None) -> int:
     build_parser.add_argument("repo_path", help="Path to a repository containing Verilog/SystemVerilog RTL.")
     build_parser.add_argument(
         "--output",
-        default="skills",
-        help="Output directory for generated skills. Defaults to ./skills.",
+        default="work/built_skills",
+        help="Output directory for generated skills. Defaults to ./work/built_skills.",
     )
     build_parser.add_argument(
         "--clean",

@@ -22,7 +22,7 @@ The repository now has two related flows:
    - Generates skill packages:
 
 ```text
-skills/<skill_name>/
+work/built_skills/<skill_name>/
   module_info.json
   README.md
   template.v
@@ -31,7 +31,7 @@ skills/<skill_name>/
     tb_<module>.v
 ```
 
-The manually curated skills under `data/rtl_skills/` are richer and still useful as a reference target for future builder quality improvements.
+The manually curated skills now live under `skills/` and are intended to be committed. They are richer and still useful as a reference target for future builder quality improvements.
 
 ## Hardening Added
 
@@ -58,10 +58,11 @@ work/external_skills/<repo-name>/
 Generated output paths are ignored by git:
 
 ```text
-skills/
 work/built_skills/
 work/external_skills/
 ```
+
+The curated root `skills/` is not ignored, so changes there can be committed.
 
 ## Commands Recently Verified
 
@@ -153,4 +154,4 @@ These failures are useful signal: the smoke test is exposing the current determi
    - Surelog/UHDM, slang, tree-sitter, or Pyverilog.
    - Keep deterministic regex parser as the zero-dependency fallback.
 
-5. Use curated `data/rtl_skills/` as golden examples for what high-quality generated packages should eventually resemble.
+5. Use curated `skills/` as golden examples for what high-quality generated packages should eventually resemble.

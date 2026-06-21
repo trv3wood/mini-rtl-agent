@@ -34,7 +34,7 @@ def test_missing_query_plan_fields_fail_gracefully(tmp_path: Path) -> None:
     path = tmp_path / "bad_query_plan.json"
     path.write_text(json.dumps({"intent": "bad"}), encoding="utf-8")
     run = subprocess.run(
-        ["python3", "-m", "skill_retriever", "search", str(path), "--skills-root", "data/rtl_skills"],
+        ["python3", "-m", "skill_retriever", "search", str(path), "--skills-root", "skills"],
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -46,7 +46,7 @@ def test_missing_query_plan_fields_fail_gracefully(tmp_path: Path) -> None:
 
 def test_curated_arbiter_query_ranks_round_robin_first(tmp_path: Path) -> None:
     plan = load_query_plan(write_query_plan(tmp_path / "query_plan.json"))
-    results = retrieve_skills(plan, Path("data/rtl_skills"), limit=3)
+    results = retrieve_skills(plan, Path("skills"), limit=3)
     assert results[0].name == "round_robin_arbiter"
     assert results[0].score > 0
     assert any("category matched" in why for why in results[0].why_matched)
@@ -61,7 +61,7 @@ def test_negative_term_penalty_ranks_sync_fifo_above_async_fifo() -> None:
         likely_interfaces=["fifo"],
         required_features=[],
     )
-    results = retrieve_skills(plan, Path("data/rtl_skills"), limit=5)
+    results = retrieve_skills(plan, Path("skills"), limit=5)
     names = [result.name for result in results]
     assert names.index("sync_fifo") < names.index("async_fifo")
     async_result = next(result for result in results if result.name == "async_fifo")
@@ -78,7 +78,7 @@ def test_cli_table_and_json_output(tmp_path: Path) -> None:
             "search",
             str(query_plan),
             "--skills-root",
-            "data/rtl_skills",
+            "skills",
             "--limit",
             "2",
         ],
@@ -98,7 +98,7 @@ def test_cli_table_and_json_output(tmp_path: Path) -> None:
             "search",
             str(query_plan),
             "--skills-root",
-            "data/rtl_skills",
+            "skills",
             "--format",
             "json",
             "--limit",
@@ -122,7 +122,7 @@ def test_langchain_tool_impl_invokes_retriever() -> None:
         likely_categories=["control"],
         likely_interfaces=["arbiter"],
         required_features=["acknowledge", "round_robin"],
-        skills_root="data/rtl_skills",
+        skills_root="skills",
         limit=1,
     )
     assert payload["results"][0]["name"] == "round_robin_arbiter"

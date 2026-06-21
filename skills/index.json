@@ -22,12 +22,12 @@
       "synchronizer"
     ],
     "name": "async_fifo",
-    "path": "data/rtl_skills/async_fifo/module_info.json",
-    "readme_path": "data/rtl_skills/async_fifo/README.md",
+    "path": "skills/async_fifo/module_info.json",
+    "readme_path": "skills/async_fifo/README.md",
     "skill_type": "module",
     "source_ref_count": 3,
-    "template_path": "data/rtl_skills/async_fifo/template.v",
-    "testbench_path": "data/rtl_skills/async_fifo/examples/tb_async_fifo.v",
+    "template_path": "skills/async_fifo/template.v",
+    "testbench_path": "skills/async_fifo/examples/tb_async_fifo.v",
     "unresolved_dependencies": []
   },
   {
@@ -51,12 +51,12 @@
       "tready"
     ],
     "name": "axis_handshake_buffer",
-    "path": "data/rtl_skills/axis_handshake_buffer/module_info.json",
-    "readme_path": "data/rtl_skills/axis_handshake_buffer/README.md",
+    "path": "skills/axis_handshake_buffer/module_info.json",
+    "readme_path": "skills/axis_handshake_buffer/README.md",
     "skill_type": "primitive",
     "source_ref_count": 2,
-    "template_path": "data/rtl_skills/axis_handshake_buffer/template.v",
-    "testbench_path": "data/rtl_skills/axis_handshake_buffer/examples/tb_axis_handshake_buffer.v",
+    "template_path": "skills/axis_handshake_buffer/template.v",
+    "testbench_path": "skills/axis_handshake_buffer/examples/tb_axis_handshake_buffer.v",
     "unresolved_dependencies": []
   },
   {
@@ -86,12 +86,12 @@
       "ack"
     ],
     "name": "i2c_master",
-    "path": "data/rtl_skills/i2c_master/module_info.json",
-    "readme_path": "data/rtl_skills/i2c_master/README.md",
+    "path": "skills/i2c_master/module_info.json",
+    "readme_path": "skills/i2c_master/README.md",
     "skill_type": "module",
     "source_ref_count": 3,
-    "template_path": "data/rtl_skills/i2c_master/template.v",
-    "testbench_path": "data/rtl_skills/i2c_master/examples/tb_i2c_master.v",
+    "template_path": "skills/i2c_master/template.v",
+    "testbench_path": "skills/i2c_master/examples/tb_i2c_master.v",
     "unresolved_dependencies": [
       "i2c_master_byte_ctrl",
       "i2c_master_bit_ctrl"
@@ -117,12 +117,12 @@
       "synchronous deassertion"
     ],
     "name": "reset_synchronizer",
-    "path": "data/rtl_skills/reset_synchronizer/module_info.json",
-    "readme_path": "data/rtl_skills/reset_synchronizer/README.md",
+    "path": "skills/reset_synchronizer/module_info.json",
+    "readme_path": "skills/reset_synchronizer/README.md",
     "skill_type": "primitive",
     "source_ref_count": 1,
-    "template_path": "data/rtl_skills/reset_synchronizer/template.v",
-    "testbench_path": "data/rtl_skills/reset_synchronizer/examples/tb_reset_synchronizer.v",
+    "template_path": "skills/reset_synchronizer/template.v",
+    "testbench_path": "skills/reset_synchronizer/examples/tb_reset_synchronizer.v",
     "unresolved_dependencies": []
   },
   {
@@ -145,12 +145,12 @@
       "priority"
     ],
     "name": "round_robin_arbiter",
-    "path": "data/rtl_skills/round_robin_arbiter/module_info.json",
-    "readme_path": "data/rtl_skills/round_robin_arbiter/README.md",
+    "path": "skills/round_robin_arbiter/module_info.json",
+    "readme_path": "skills/round_robin_arbiter/README.md",
     "skill_type": "primitive",
     "source_ref_count": 1,
-    "template_path": "data/rtl_skills/round_robin_arbiter/template.v",
-    "testbench_path": "data/rtl_skills/round_robin_arbiter/examples/tb_round_robin_arbiter.v",
+    "template_path": "skills/round_robin_arbiter/template.v",
+    "testbench_path": "skills/round_robin_arbiter/examples/tb_round_robin_arbiter.v",
     "unresolved_dependencies": []
   },
   {
@@ -176,12 +176,12 @@
       "shift register"
     ],
     "name": "spi_master",
-    "path": "data/rtl_skills/spi_master/module_info.json",
-    "readme_path": "data/rtl_skills/spi_master/README.md",
+    "path": "skills/spi_master/module_info.json",
+    "readme_path": "skills/spi_master/README.md",
     "skill_type": "module",
     "source_ref_count": 3,
-    "template_path": "data/rtl_skills/spi_master/template.v",
-    "testbench_path": "data/rtl_skills/spi_master/examples/tb_spi_master.v",
+    "template_path": "skills/spi_master/template.v",
+    "testbench_path": "skills/spi_master/examples/tb_spi_master.v",
     "unresolved_dependencies": []
   },
   {
@@ -204,12 +204,12 @@
       "circular pointer"
     ],
     "name": "sync_fifo",
-    "path": "data/rtl_skills/sync_fifo/module_info.json",
-    "readme_path": "data/rtl_skills/sync_fifo/README.md",
+    "path": "skills/sync_fifo/module_info.json",
+    "readme_path": "skills/sync_fifo/README.md",
     "skill_type": "module",
     "source_ref_count": 3,
-    "template_path": "data/rtl_skills/sync_fifo/template.v",
-    "testbench_path": "data/rtl_skills/sync_fifo/examples/tb_sync_fifo.v",
+    "template_path": "skills/sync_fifo/template.v",
+    "testbench_path": "skills/sync_fifo/examples/tb_sync_fifo.v",
     "unresolved_dependencies": []
   },
   {
@@ -234,12 +234,12 @@
       "ready valid"
     ],
     "name": "uart_rx",
-    "path": "data/rtl_skills/uart_rx/module_info.json",
-    "readme_path": "data/rtl_skills/uart_rx/README.md",
+    "path": "skills/uart_rx/module_info.json",
+    "readme_path": "skills/uart_rx/README.md",
     "skill_type": "module",
     "source_ref_count": 1,
-    "template_path": "data/rtl_skills/uart_rx/template.v",
-    "testbench_path": "data/rtl_skills/uart_rx/examples/tb_uart_rx.v",
+    "template_path": "skills/uart_rx/template.v",
+    "testbench_path": "skills/uart_rx/examples/tb_uart_rx.v",
     "unresolved_dependencies": []
   },
   {
@@ -264,12 +264,12 @@
       "ready valid"
     ],
     "name": "uart_tx",
-    "path": "data/rtl_skills/uart_tx/module_info.json",
-    "readme_path": "data/rtl_skills/uart_tx/README.md",
+    "path": "skills/uart_tx/module_info.json",
+    "readme_path": "skills/uart_tx/README.md",
     "skill_type": "module",
     "source_ref_count": 2,
-    "template_path": "data/rtl_skills/uart_tx/template.v",
-    "testbench_path": "data/rtl_skills/uart_tx/examples/tb_uart_tx.v",
+    "template_path": "skills/uart_tx/template.v",
+    "testbench_path": "skills/uart_tx/examples/tb_uart_tx.v",
     "unresolved_dependencies": []
   },
   {
@@ -293,12 +293,12 @@
       "interrupt"
     ],
     "name": "wishbone_reg_block",
-    "path": "data/rtl_skills/wishbone_reg_block/module_info.json",
-    "readme_path": "data/rtl_skills/wishbone_reg_block/README.md",
+    "path": "skills/wishbone_reg_block/module_info.json",
+    "readme_path": "skills/wishbone_reg_block/README.md",
     "skill_type": "module",
     "source_ref_count": 2,
-    "template_path": "data/rtl_skills/wishbone_reg_block/template.v",
-    "testbench_path": "data/rtl_skills/wishbone_reg_block/examples/tb_wishbone_reg_block.v",
+    "template_path": "skills/wishbone_reg_block/template.v",
+    "testbench_path": "skills/wishbone_reg_block/examples/tb_wishbone_reg_block.v",
     "unresolved_dependencies": []
   }
 ]

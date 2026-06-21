@@ -130,7 +130,7 @@ def build_skill_library(repo_path: Path, output_root: Path | None = None, clean:
     repo_path = repo_path.resolve()
     if not repo_path.exists() or not repo_path.is_dir():
         raise SkillBuilderError(f"repo_path is not a directory: {repo_path}")
-    output_root = (output_root or (Path.cwd() / "skills")).resolve()
+    output_root = (output_root or (Path.cwd() / "work" / "built_skills")).resolve()
     if clean:
         clean_output_root(output_root)
     output_root.mkdir(parents=True, exist_ok=True)

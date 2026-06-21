@@ -10,7 +10,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL_DIR = ROOT / "data" / "rtl_skills"
+SKILL_DIR = ROOT / "skills"
 INDEX_PATH = SKILL_DIR / "index.json"
 
 REQUIRED_TOP_FIELDS = {
