@@ -2,7 +2,7 @@
 
 ## Current Progress
 
-The repository now has two related flows:
+The repository now has three related flows:
 
 1. A minimal RTL agent demo:
    - Natural language UART TX spec.
@@ -33,9 +33,39 @@ work/built_skills/<skill_name>/
 
 The manually curated skills now live under `skills/` and are intended to be committed. They are richer and still useful as a reference target for future builder quality improvements.
 
+3. An LLM HDL Agent demo:
+   - CLI: `python3 -m hdl_agent "<natural-language HDL request>" --show-trace`.
+   - LLM configuration is centralized in `src/utils/llm.py`.
+   - `.env` is loaded through `python-dotenv`; `.env.example` documents the provider-neutral variables:
+     - `LLM_API_KEY`
+     - `LLM_BASE_URL`
+     - `LLM_MODEL`
+     - `LLM_TIMEOUT_SECONDS`
+   - The workflow is:
+
+```text
+human HDL request
+  -> LLM rewrites request into query_plan.json
+  -> LangChain-registered retrieve_rtl_skills tool ranks skills deterministically
+  -> agent reads the top skill's module_info.json, README.md, and template.v
+  -> LLM generates HDL
+  -> iverilog -g2012 -Wall syntax check
+  -> on syntax failure, compiler log + broken HDL are fed back for repair
+  -> fail after 3 repair attempts
+```
+
+Default generated output:
+
+```text
+work/generated/agent_rtl.v
+```
+
+The retriever remains deterministic. The LLM is used for query-plan rewriting, HDL generation, and syntax-error repair only; it does not directly choose the final skill outside the ranked retriever result.
+
 ## Hardening Added
 
 - Regression tests in `tests/test_skill_builder.py`.
+- LLM HDL agent tests in `tests/test_hdl_agent.py`.
 - Golden-output tests against `work/sample_rtl_repo`.
 - Python schema validator in `src/skill_builder/schema.py`.
 - Provenance fields in generated `module_info.json`:
@@ -58,6 +88,7 @@ work/external_skills/<repo-name>/
 Generated output paths are ignored by git:
 
 ```text
+work/generated/
 work/built_skills/
 work/external_skills/
 ```
@@ -70,13 +101,26 @@ The curated root `skills/` is not ignored, so changes there can be committed.
 make skill-builder-demo
 PATH=/home/zys/mini-rtl-agent/.venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 pytest -q
 scripts/build_from_external_repo.sh work/sample_rtl_repo
+python3 -m hdl_agent --help
+iverilog -g2012 -Wall -o /tmp/agent_uart.vvp work/generated/agent_rtl.v
 ```
 
 Latest pytest result:
 
 ```text
-10 passed
+23 passed
 ```
+
+Latest real LLM smoke result from the user:
+
+```text
+query_plan intent: design a UART transmitter
+retrieved top-3: uart_tx, uart_rx, axis_handshake_buffer
+selected_skill: uart_tx
+wrote: work/generated/agent_rtl.v
+```
+
+The generated `work/generated/agent_rtl.v` compiled with `iverilog -g2012 -Wall`.
 
 ## External Smoke Results
 
@@ -131,6 +175,10 @@ These failures are useful signal: the smoke test is exposing the current determi
 - Generated self-checking testbenches prove that the generated template compiles and runs, not that it matches the original module behavior.
 - Complex modules such as async FIFOs, AXIS adapters, bus master models, and LFSRs currently need pattern-specific template/testbench generators.
 - `source_refs` are provenance and learning references only. The builder does not download or copy upstream RTL into generated templates.
+- Query-plan values are still free-form LLM output. The retriever tolerates this through positive-term matching, but interface/category names can drift from the curated skill taxonomy.
+- The LLM HDL agent currently performs syntax checking only. It does not yet auto-run the selected skill's self-checking testbench against generated HDL.
+- HDL generation is strongly grounded by the selected skill template. This is useful for demo stability, but it means the output may look close to the template unless the request forces customization.
+- Real provider calls require a local `.env` or exported `LLM_*` variables. `.env` is ignored by git; `.env.example` is commit-safe.
 
 ## Suggested Next Steps
 
@@ -155,3 +203,8 @@ These failures are useful signal: the smoke test is exposing the current determi
    - Keep deterministic regex parser as the zero-dependency fallback.
 
 5. Use curated `skills/` as golden examples for what high-quality generated packages should eventually resemble.
+
+6. Harden the LLM HDL agent:
+   - Normalize query-plan category/interface values against the known skill taxonomy.
+   - Add optional simulation with the selected skill testbench after syntax passes.
+   - Write an agent trace artifact alongside `agent_rtl.v` for reports and demos.

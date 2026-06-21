@@ -18,13 +18,6 @@ iverilog -V
 vvp -V
 ```
 
-## Outputs
-
-- Generated RTL: `work/generated/uart_tx.v`
-- Generated testbench: `work/generated/tb_uart_tx.v`
-- Simulator binary/logs: `work/generated/`
-- Report: `work/reports/report.md`
-
 ## Project Layout
 
 ```text
@@ -124,6 +117,39 @@ The retriever:
 - Returns ranked skills with `why_matched` and `penalties`.
 
 LangChain integration is exposed as a tool named `retrieve_rtl_skills`. The tool accepts the same query-plan fields plus optional `skills_root` and `limit`. It does not call an LLM and does not let the model choose the final skill.
+
+## LLM HDL Agent Demo
+
+The HDL agent demo connects a real OpenAI-compatible LLM endpoint. LLM configuration is centralized in `src/utils/llm.py`; workflow code does not read API keys directly and does not assume a specific provider.
+
+Create a local `.env` from the example, or export the same variables in your shell:
+
+```sh
+cp .env.example .env
+```
+
+`.env` is loaded automatically by `src/utils/llm.py` and is ignored by git.
+
+```sh
+LLM_API_KEY=...
+LLM_BASE_URL=https://api.example.com/v1
+LLM_MODEL=provider-model-name
+LLM_TIMEOUT_SECONDS=60
+```
+
+Run natural language -> query plan -> skill retriever tool -> selected skill context -> generated HDL -> `iverilog` syntax check:
+
+```sh
+python3 -m hdl_agent "Create a small UART transmitter with ready/valid input and busy output" --show-trace
+```
+
+Default output:
+
+```text
+work/generated/agent_rtl.v
+```
+
+The retriever remains deterministic. The LLM only rewrites the human request into a query plan and generates HDL from the selected skill's `module_info.json`, `README.md`, and `template.v`. Generated HDL must pass `iverilog -g2012 -Wall`; on syntax failure the workflow feeds the compiler log back to the LLM and retries repair up to 3 times before failing.
 
 ## Automated RTL Skill Builder
 
