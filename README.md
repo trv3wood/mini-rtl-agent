@@ -18,26 +18,6 @@ iverilog -V
 vvp -V
 ```
 
-## Run
-
-```sh
-make demo
-```
-
-Or pass your own short spec:
-
-```sh
-python3 -m src.agent --spec "UART transmitter, 8 data bits, LSB first, start/done/busy, one stop bit"
-```
-
-Useful demo flag:
-
-```sh
-python3 -m src.agent --inject-bug
-```
-
-That intentionally creates a first bad RTL attempt so the repair loop has something to fix.
-
 ## Outputs
 
 - Generated RTL: `work/generated/uart_tx.v`
