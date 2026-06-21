@@ -2,7 +2,7 @@
 
 ## Current Progress
 
-The repository now has three related flows:
+The repository now has four related flows:
 
 1. A minimal RTL agent demo:
    - Natural language UART TX spec.
@@ -62,10 +62,39 @@ work/generated/agent_rtl.v
 
 The retriever remains deterministic. The LLM is used for query-plan rewriting, HDL generation, and syntax-error repair only; it does not directly choose the final skill outside the ranked retriever result.
 
+4. An Architecture Planner subsystem:
+   - CLI: `python3 -m architecture "<natural-language hardware requirement>"`.
+   - Source: `src/architecture/`.
+   - Uses the configured LLM to decompose arbitrary hardware requirements.
+   - No hardcoded architecture outputs; UART RX, 4-point FFT, and DMA are test/smoke examples rather than planner limits.
+   - Code-side validation checks the LLM JSON shape before artifact export.
+   - Outputs:
+
+```text
+work/architecture/architecture.json
+work/architecture/architecture.md
+work/architecture/architecture.mmd
+work/architecture/specs/<submodule>.md
+```
+
+The architecture schema is intentionally simple and downstream-friendly:
+
+```json
+{
+  "top_module": "...",
+  "submodules": [],
+  "connections": [],
+  "notes": []
+}
+```
+
+Each submodule is annotated with a likely skill category such as `fifo`, `fsm`, `uart`, `arbiter`, `synchronizer`, `rom`, `multiplier`, or `dsp`.
+
 ## Hardening Added
 
 - Regression tests in `tests/test_skill_builder.py`.
 - LLM HDL agent tests in `tests/test_hdl_agent.py`.
+- Architecture planner tests in `tests/test_architecture.py`.
 - Golden-output tests against `work/sample_rtl_repo`.
 - Python schema validator in `src/skill_builder/schema.py`.
 - Provenance fields in generated `module_info.json`:
@@ -89,6 +118,7 @@ Generated output paths are ignored by git:
 
 ```text
 work/generated/
+work/architecture/
 work/built_skills/
 work/external_skills/
 ```
@@ -99,16 +129,18 @@ The curated root `skills/` is not ignored, so changes there can be committed.
 
 ```sh
 make skill-builder-demo
+make architecture-demo
 PATH=/home/zys/mini-rtl-agent/.venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 pytest -q
 scripts/build_from_external_repo.sh work/sample_rtl_repo
 python3 -m hdl_agent --help
 iverilog -g2012 -Wall -o /tmp/agent_uart.vvp work/generated/agent_rtl.v
+python3 -m architecture "Design a 4-point FFT accelerator" --output-dir /tmp/arch_fft
 ```
 
 Latest pytest result:
 
 ```text
-23 passed
+32 passed
 ```
 
 Latest real LLM smoke result from the user:
@@ -121,6 +153,19 @@ wrote: work/generated/agent_rtl.v
 ```
 
 The generated `work/generated/agent_rtl.v` compiled with `iverilog -g2012 -Wall`.
+
+Latest architecture planner smoke examples:
+
+```text
+UART receiver with FIFO buffering:
+  submodules: UART_RX, Controller, FIFO
+4-point FFT accelerator:
+  submodules: FFT_Controller, Butterfly, Twiddle_ROM, Complex_Multiplier
+simple DMA engine:
+  submodules: DMA_Controller, Address_Generator, FIFO_Buffer, Bus_Arbiter
+```
+
+With LLM configuration available, `make architecture-demo` writes `architecture.json`, `architecture.md`, `architecture.mmd`, and submodule specs under `work/architecture/`.
 
 ## External Smoke Results
 
@@ -179,6 +224,8 @@ These failures are useful signal: the smoke test is exposing the current determi
 - The LLM HDL agent currently performs syntax checking only. It does not yet auto-run the selected skill's self-checking testbench against generated HDL.
 - HDL generation is strongly grounded by the selected skill template. This is useful for demo stability, but it means the output may look close to the template unless the request forces customization.
 - Real provider calls require a local `.env` or exported `LLM_*` variables. `.env` is ignored by git; `.env.example` is commit-safe.
+- Architecture planning now depends on LLM quality. The code validates structure and exports artifacts, but it does not guarantee stable decompositions across providers or prompts.
+- Architecture specs are intended as future RTL-generation inputs; no multi-module RTL orchestration is implemented yet.
 
 ## Suggested Next Steps
 
@@ -208,3 +255,8 @@ These failures are useful signal: the smoke test is exposing the current determi
    - Normalize query-plan category/interface values against the known skill taxonomy.
    - Add optional simulation with the selected skill testbench after syntax passes.
    - Write an agent trace artifact alongside `agent_rtl.v` for reports and demos.
+
+7. Extend the Architecture Planner:
+   - Strengthen the validation schema.
+   - Feed submodule specs into the existing HDL agent one module at a time.
+   - Add dependency-aware generation order for future multi-module RTL orchestration.

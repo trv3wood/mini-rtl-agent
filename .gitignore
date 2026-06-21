@@ -15,5 +15,6 @@ wheels/
 **/generated/
 
 # Generated skill-builder outputs
+work/architecture/
 work/built_skills/
 work/external_skills/

@@ -151,6 +151,39 @@ work/generated/agent_rtl.v
 
 The retriever remains deterministic. The LLM only rewrites the human request into a query plan and generates HDL from the selected skill's `module_info.json`, `README.md`, and `template.v`. Generated HDL must pass `iverilog -g2012 -Wall`; on syntax failure the workflow feeds the compiler log back to the LLM and retries repair up to 3 times before failing.
 
+## Architecture Planner
+
+The Phase 2 architecture planner uses the configured LLM to decompose system-level hardware requirements into submodules, dependencies, Markdown specs, and Mermaid diagrams. The planner is not limited to a fixed set of local examples; code-side validation keeps the JSON schema and artifact generation testable.
+
+Run:
+
+```sh
+python3 -m architecture "Design a UART receiver with FIFO buffering"
+make architecture-demo
+```
+
+Default outputs:
+
+```text
+work/architecture/architecture.json
+work/architecture/architecture.md
+work/architecture/architecture.mmd
+work/architecture/specs/<submodule>.md
+```
+
+The output schema is:
+
+```json
+{
+  "top_module": "...",
+  "submodules": [],
+  "connections": [],
+  "notes": []
+}
+```
+
+Code still annotates each LLM-produced submodule with a likely skill category such as `fifo`, `fsm`, `uart`, `arbiter`, `synchronizer`, `rom`, `multiplier`, or `dsp`.
+
 ## Automated RTL Skill Builder
 
 The deterministic builder converts a local Verilog/SystemVerilog repository into reusable skill packages without LLM calls:
