@@ -11,9 +11,9 @@ class FakeLLM:
     def __init__(self) -> None:
         self.text_prompts: list[list[dict[str, str]]] = []
 
-    def complete_json(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> dict[str, Any]:
+    def complete_structured(self, messages: list[dict[str, str]], schema, *, temperature: float = 0.0):
         assert "UART" in messages[-1]["content"] or "uart" in messages[-1]["content"]
-        return {
+        payload = {
             "intent": "uart transmitter",
             "positive_terms": ["uart", "tx", "transmitter", "baud", "ready valid"],
             "negative_terms": [],
@@ -21,6 +21,7 @@ class FakeLLM:
             "likely_interfaces": ["uart", "ready_valid"],
             "required_features": ["start bit", "stop bit", "busy"],
         }
+        return schema.model_validate(payload)
 
     def complete_text(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> str:
         self.text_prompts.append(messages)

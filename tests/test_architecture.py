@@ -15,13 +15,13 @@ class FakeArchitectureLLM:
         self.payload = payload
         self.messages: list[list[dict[str, str]]] = []
 
-    def complete_json(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> dict[str, Any]:
+    def complete_structured(self, messages: list[dict[str, str]], schema, *, temperature: float = 0.0):
         self.messages.append(messages)
         system = messages[0]["content"]
         if "architecture planner" in system:
-            return self.payload
+            return schema.model_validate(self.payload)
         if "skill mapper" in system:
-            return {
+            payload = {
                 "mappings": [
                     {
                         "name": submodule["name"],
@@ -31,6 +31,7 @@ class FakeArchitectureLLM:
                     for submodule in self.payload["submodules"]
                 ]
             }
+            return schema.model_validate(payload)
         raise AssertionError(f"unexpected JSON prompt: {system}")
 
     def complete_text(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> str:
@@ -283,7 +284,7 @@ def test_validate_architecture_rejects_unknown_connection_target() -> None:
 
     try:
         validate_architecture(payload)
-    except RuntimeError as exc:
+    except Exception as exc:
         assert "unknown submodule" in str(exc)
     else:
         raise AssertionError("expected validation failure")
@@ -292,7 +293,7 @@ def test_validate_architecture_rejects_unknown_connection_target() -> None:
 def test_validate_skill_mapping_rejects_missing_submodule() -> None:
     try:
         validate_skill_mapping({"mappings": []}, ["FIFO"])
-    except RuntimeError as exc:
+    except Exception as exc:
         assert "missing submodules" in str(exc)
     else:
         raise AssertionError("expected skill mapping validation failure")

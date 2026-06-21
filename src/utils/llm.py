@@ -1,18 +1,29 @@
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol, TypeVar
 
 from dotenv import load_dotenv
+from langchain_core.exceptions import OutputParserException
+from langchain_core.output_parsers import PydanticOutputParser
+from pydantic import BaseModel
+
+
+StructuredModel = TypeVar("StructuredModel", bound=BaseModel)
 
 
 class ChatClient(Protocol):
     def complete_text(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> str:
         ...
 
-    def complete_json(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> dict[str, Any]:
+    def complete_structured(
+        self,
+        messages: list[dict[str, str]],
+        schema: type[StructuredModel],
+        *,
+        temperature: float = 0.0,
+    ) -> StructuredModel:
         ...
 
 
@@ -63,23 +74,28 @@ class OpenAICompatibleLLM:
             raise RuntimeError("LLM returned empty content")
         return content.strip()
 
-    def complete_json(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> dict[str, Any]:
-        response = self.client.chat.completions.create(
-            model=self.config.model,
-            messages=messages,
-            temperature=temperature,
-            response_format={"type": "json_object"},
-        )
-        content = response.choices[0].message.content
-        if not content:
-            raise RuntimeError("LLM returned empty JSON content")
+    def complete_structured(
+        self,
+        messages: list[dict[str, str]],
+        schema: type[StructuredModel],
+        *,
+        temperature: float = 0.0,
+    ) -> StructuredModel:
+        parser = PydanticOutputParser(pydantic_object=schema)
+        prompted_messages = with_format_instructions(messages, parser.get_format_instructions())
+        text = self.complete_text(prompted_messages, temperature=temperature)
         try:
-            payload = json.loads(content)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"LLM returned invalid JSON: {exc}") from exc
-        if not isinstance(payload, dict):
-            raise RuntimeError("LLM JSON response must be an object")
-        return payload
+            return parser.parse(text)
+        except OutputParserException as exc:
+            raise RuntimeError(f"LLM structured output failed validation: {exc}") from exc
+
+
+def with_format_instructions(messages: list[dict[str, str]], instructions: str) -> list[dict[str, str]]:
+    if not messages:
+        return [{"role": "system", "content": instructions}]
+    updated = [dict(message) for message in messages]
+    updated[0]["content"] = f"{updated[0]['content']}\n\n{instructions}"
+    return updated
 
 
 def required_env(name: str) -> str:

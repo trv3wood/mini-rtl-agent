@@ -11,35 +11,37 @@ from src.skill_builder.schema import validate_module_info
 
 
 class FakeClassifierLLM:
-    def complete_json(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> dict:
+    def complete_structured(self, messages: list[dict[str, str]], schema, *, temperature: float = 0.0):
         prompt = messages[-1]["content"].lower()
         if "fifo" in prompt:
-            return {
+            payload = {
                 "category": "buffering",
                 "interfaces": ["fifo"],
                 "patterns": ["fifo"],
                 "keywords": ["fifo", "buffering"],
             }
-        if "round_robin" in prompt or "arbiter" in prompt:
-            return {
+        elif "round_robin" in prompt or "arbiter" in prompt:
+            payload = {
                 "category": "control",
                 "interfaces": ["arbiter"],
                 "patterns": ["arbiter"],
                 "keywords": ["arbiter", "control"],
             }
-        if "reset" in prompt or "sync" in prompt:
-            return {
+        elif "reset" in prompt or "sync" in prompt:
+            payload = {
                 "category": "cdc",
                 "interfaces": ["cdc"],
                 "patterns": ["synchronizer"],
                 "keywords": ["synchronizer", "cdc"],
             }
-        return {
-            "category": "control",
-            "interfaces": ["rtl"],
-            "patterns": ["counter"],
-            "keywords": ["counter", "control"],
-        }
+        else:
+            payload = {
+                "category": "control",
+                "interfaces": ["rtl"],
+                "patterns": ["counter"],
+                "keywords": ["counter", "control"],
+            }
+        return schema.model_validate(payload)
 
     def complete_text(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> str:
         raise AssertionError("skill classifier should request JSON, not text")

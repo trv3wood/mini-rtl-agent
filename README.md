@@ -121,6 +121,7 @@ LangChain integration is exposed as a tool named `retrieve_rtl_skills`. The tool
 ## LLM HDL Agent Demo
 
 The HDL agent demo connects a real OpenAI-compatible LLM endpoint. LLM configuration is centralized in `src/utils/llm.py`; workflow code does not read API keys directly and does not assume a specific provider.
+Structured LLM outputs use LangChain's `PydanticOutputParser` in `src/utils/llm.py`.
 
 Create a local `.env` from the example, or export the same variables in your shell:
 
@@ -153,7 +154,7 @@ The retriever remains deterministic. The LLM only rewrites the human request int
 
 ## Architecture Planner
 
-The Phase 2 architecture planner uses the configured LLM to decompose system-level hardware requirements into submodules, dependencies, Markdown specs, and Mermaid diagrams. The planner is not limited to a fixed set of local examples; code-side validation keeps the JSON schema and artifact generation testable.
+The Phase 2 architecture planner uses the configured LLM to decompose system-level hardware requirements into submodules, dependencies, Markdown specs, and Mermaid diagrams. The planner is not limited to a fixed set of local examples; structured output parsing and validation go through LangChain/Pydantic schemas while artifact generation remains testable.
 
 Run:
 

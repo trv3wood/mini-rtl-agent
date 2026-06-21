@@ -36,6 +36,7 @@ The manually curated skills now live under `skills/` and are intended to be comm
 3. An LLM HDL Agent demo:
    - CLI: `python3 -m hdl_agent "<natural-language HDL request>" --show-trace`.
    - LLM configuration is centralized in `src/utils/llm.py`.
+   - Structured LLM outputs use LangChain `PydanticOutputParser` with Pydantic schemas.
    - `.env` is loaded through `python-dotenv`; `.env.example` documents the provider-neutral variables:
      - `LLM_API_KEY`
      - `LLM_BASE_URL`
@@ -67,7 +68,7 @@ The retriever remains deterministic. The LLM is used for query-plan rewriting, H
    - Source: `src/architecture/`.
    - Uses the configured LLM to decompose arbitrary hardware requirements.
    - No hardcoded architecture outputs; UART RX, 4-point FFT, and DMA are test/smoke examples rather than planner limits.
-   - Code-side validation checks the LLM JSON shape before artifact export.
+   - LangChain/Pydantic structured output parsing checks the LLM JSON shape before artifact export.
    - Outputs:
 
 ```text

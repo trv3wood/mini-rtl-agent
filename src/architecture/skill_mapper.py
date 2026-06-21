@@ -4,10 +4,38 @@ import json
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel, Field
 from src.utils.llm import ChatClient, OpenAICompatibleLLM
 
 
 DEFAULT_SKILLS_ROOT = Path("skills")
+
+
+class SkillMapping(BaseModel):
+    name: str = Field(min_length=1)
+    skill_category: str = Field(min_length=1)
+    why: str = ""
+
+
+class SkillMappingResponse(BaseModel):
+    mappings: list[SkillMapping]
+
+    def to_mapping_dict(self, submodule_names: list[str]) -> dict[str, dict[str, str]]:
+        expected = set(submodule_names)
+        by_name = {
+            item.name: {
+                "skill_category": item.skill_category,
+                "why": item.why,
+            }
+            for item in self.mappings
+        }
+        unknown = set(by_name) - expected
+        if unknown:
+            raise ValueError(f"skill mapper returned unknown submodules: {', '.join(sorted(unknown))}")
+        missing = expected - set(by_name)
+        if missing:
+            raise ValueError(f"skill mapper missing submodules: {', '.join(sorted(missing))}")
+        return by_name
 
 
 def load_skill_taxonomy(skills_root: Path = DEFAULT_SKILLS_ROOT) -> dict[str, list[str]]:
@@ -29,15 +57,13 @@ def annotate_architecture_skills(
 ) -> dict[str, Any]:
     active_llm = llm or OpenAICompatibleLLM()
     taxonomy = load_skill_taxonomy(skills_root)
-    payload = active_llm.complete_json(
+    response = active_llm.complete_structured(
         [
             {
                 "role": "system",
                 "content": (
                     "You are a skill mapper for RTL architecture nodes. "
                     "Map each submodule to one skill_category using the available skill taxonomy when possible. "
-                    "Return only JSON with this shape: "
-                    "{\"mappings\":[{\"name\":\"exact submodule name\",\"skill_category\":\"category\",\"why\":\"short reason\"}]}. "
                     "Use exact submodule names from the input. Use custom only when no taxonomy entry fits."
                 ),
             },
@@ -52,9 +78,10 @@ def annotate_architecture_skills(
                 ),
             },
         ],
+        SkillMappingResponse,
         temperature=0.0,
     )
-    mapping = validate_skill_mapping(payload, [str(item["name"]) for item in architecture["submodules"]])
+    mapping = response.to_mapping_dict([str(item["name"]) for item in architecture["submodules"]])
     annotated = dict(architecture)
     annotated["submodules"] = [
         {
@@ -68,31 +95,4 @@ def annotate_architecture_skills(
 
 
 def validate_skill_mapping(payload: dict[str, Any], submodule_names: list[str]) -> dict[str, dict[str, str]]:
-    if not isinstance(payload, dict):
-        raise RuntimeError("skill mapper response must be a JSON object")
-    mappings = payload.get("mappings")
-    if not isinstance(mappings, list):
-        raise RuntimeError("skill mapper response missing mappings list")
-
-    expected = set(submodule_names)
-    by_name: dict[str, dict[str, str]] = {}
-    for index, item in enumerate(mappings):
-        if not isinstance(item, dict):
-            raise RuntimeError(f"skill mapper mappings[{index}] must be an object")
-        name = item.get("name")
-        if not isinstance(name, str) or not name:
-            raise RuntimeError(f"skill mapper mappings[{index}].name must be a non-empty string")
-        if name not in expected:
-            raise RuntimeError(f"skill mapper returned unknown submodule: {name}")
-        skill_category = item.get("skill_category")
-        if not isinstance(skill_category, str) or not skill_category:
-            raise RuntimeError(f"skill mapper mappings[{index}].skill_category must be a non-empty string")
-        by_name[name] = {
-            "skill_category": skill_category,
-            "why": str(item.get("why", "")),
-        }
-
-    missing = expected - by_name.keys()
-    if missing:
-        raise RuntimeError(f"skill mapper missing submodules: {', '.join(sorted(missing))}")
-    return by_name
+    return SkillMappingResponse.model_validate(payload).to_mapping_dict(submodule_names)
