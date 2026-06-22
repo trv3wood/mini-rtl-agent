@@ -32,6 +32,12 @@ class ModuleInfo:
     category: str = "rtl"
     interfaces: list[str] = field(default_factory=list)
     keywords: list[str] = field(default_factory=list)
+    functional_summary: str = ""
+    structural_summary: str = ""
+    behavior_summary: str = ""
+    integration_notes: list[str] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+    use_cases: list[str] = field(default_factory=list)
     source_text: str = ""
 
 
@@ -96,7 +102,7 @@ class ModuleIR:
                 Parameter(
                     name=param.name,
                     default="" if param.default is None else str(param.default),
-                    description=f"Extracted {param.kind}.",
+                    description="",
                 )
                 for param in self.parameters
                 if param.kind == "parameter"
@@ -107,7 +113,7 @@ class ModuleIR:
                     direction=port.direction,
                     width="1" if port.width is None else str(port.width),
                     data_type=port.data_type or "wire",
-                    description=f"{port.direction} port extracted from {self.parse_backend} frontend.",
+                    description="",
                 )
                 for port in self.ports
             ],

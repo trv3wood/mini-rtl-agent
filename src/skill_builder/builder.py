@@ -235,6 +235,8 @@ def clean_output_root(output_root: Path) -> None:
     if not output_root.exists():
         return
     for child in output_root.iterdir():
+        if child.name == ".llm_cache":
+            continue
         if child.is_dir():
             shutil.rmtree(child)
         elif child.name == "report.json":
@@ -275,6 +277,7 @@ def build_skill_library(
     active_llm = llm
     if candidates and active_llm is None:
         active_llm = OpenAICompatibleLLM()
+    llm_cache_dir = output_root / ".llm_cache"
     module_lookup = {(module_ir.name, module_ir.source_file): module_ir for module_ir in module_irs}
     for candidate in candidates:
         module_ir = module_lookup.get((candidate.root_module, candidate.root_source))
@@ -282,7 +285,7 @@ def build_skill_library(
             module_ir = hierarchy.modules.get(candidate.root_module)
         if module_ir is None:
             continue
-        module = classify(module_ir.to_module_info(), active_llm)
+        module = classify(module_ir.to_module_info(), active_llm, cache_dir=llm_cache_dir)
         modules.append(module)
         module_candidate_pairs.append((module, candidate))
 
@@ -323,6 +326,7 @@ def build_skill_library(
         "rtl_files_scanned": len(rtl_files),
         "modules_extracted": len(module_irs),
         "skills_generated": len(skills),
+        "llm_cache_dir": str(llm_cache_dir),
         "parse_errors": [{"warning": warning} for warning in sorted(set(parse_warnings))],
         "frontend": {
             "backend_counts": backend_counts,

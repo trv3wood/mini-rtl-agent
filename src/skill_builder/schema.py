@@ -15,13 +15,19 @@ REQUIRED_TOP_FIELDS = {
     "dependencies",
     "interfaces",
     "patterns",
+    "functional_summary",
+    "structural_summary",
+    "behavior_summary",
+    "integration_notes",
+    "limitations",
+    "use_cases",
     "implementation_notes",
     "test_strategy",
     "verification_goals",
     "keywords",
     "provenance",
 }
-REQUIRED_PORT_FIELDS = {"name", "direction", "width", "description"}
+REQUIRED_PORT_FIELDS = {"name", "direction", "width"}
 REQUIRED_PROVENANCE_FIELDS = {
     "source_file",
     "detected_module_name",
@@ -75,9 +81,16 @@ def validate_module_info(data: dict[str, Any]) -> list[str]:
         "test_strategy",
         "verification_goals",
         "keywords",
+        "integration_notes",
+        "limitations",
+        "use_cases",
     ):
         if field in data and not isinstance(data[field], list):
             errors.append(f"{field} must be a list")
+
+    for field in ("functional_summary", "structural_summary", "behavior_summary"):
+        if field in data and (not isinstance(data[field], str) or not data[field].strip()):
+            errors.append(f"{field} must be a non-empty string")
 
     provenance = data.get("provenance")
     if not isinstance(provenance, dict):

@@ -19,7 +19,11 @@ from src.skill_builder.schema import validate_module_info
 
 
 class FakeClassifierLLM:
+    def __init__(self) -> None:
+        self.calls = 0
+
     def complete_structured(self, messages: list[dict[str, str]], schema, *, temperature: float = 0.0):
+        self.calls += 1
         prompt = messages[-1]["content"].lower()
         if "fifo" in prompt:
             payload = {
@@ -49,6 +53,16 @@ class FakeClassifierLLM:
                 "patterns": ["counter"],
                 "keywords": ["counter", "control"],
             }
+        payload.update(
+            {
+                "functional_summary": "This module provides a deterministic RTL building block inferred from its interface.",
+                "structural_summary": "The module structure is summarized from extracted ports, parameters, and instance edges.",
+                "behavior_summary": "The observable behavior summary is inferred from source comments and interface signals.",
+                "integration_notes": ["Check clock, reset, and handshake timing before integration."],
+                "limitations": ["Do not treat the generated template as functionally equivalent to source RTL."],
+                "use_cases": ["Use when the extracted interface and behavior summary match the target design."],
+            }
+        )
         return schema.model_validate(payload)
 
     def complete_text(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> str:
@@ -430,3 +444,22 @@ def test_clean_removes_previous_skill_directories(tmp_path: Path) -> None:
     build_skill_library(repo, output, clean=True, llm=FakeClassifierLLM())
     assert not stale.exists()
     assert (output / "one" / "module_info.json").exists()
+
+
+def test_llm_classification_cache_is_reused(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    write(repo / "rtl" / "one.v", "module one(input wire clk); endmodule\n")
+    output = tmp_path / "skills"
+    llm = FakeClassifierLLM()
+    build_skill_library(repo, output, clean=True, llm=llm)
+    assert llm.calls == 1
+
+    second_llm = FakeClassifierLLM()
+    build_skill_library(repo, output, clean=False, llm=second_llm)
+    assert second_llm.calls == 0
+    assert (output / ".llm_cache").exists()
+
+    third_llm = FakeClassifierLLM()
+    build_skill_library(repo, output, clean=True, llm=third_llm)
+    assert third_llm.calls == 0
+    assert (output / ".llm_cache").exists()

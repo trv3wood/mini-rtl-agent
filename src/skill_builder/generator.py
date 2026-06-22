@@ -195,22 +195,61 @@ def markdown_list(items: list[str]) -> str:
     return "\n".join(f"- {item}" for item in items) if items else "- Not detected."
 
 
+def fallback_functional_summary(module: ModuleInfo) -> str:
+    interface_text = ", ".join(module.interfaces) if module.interfaces else "the extracted RTL interface"
+    pattern_text = ", ".join(module.patterns) if module.patterns else "module-specific control/data-path behavior"
+    return f"{module.name} implements {pattern_text} for {interface_text}."
+
+
+def fallback_structural_summary(module: ModuleInfo) -> str:
+    ports = len(module.ports)
+    params = len(module.parameters)
+    return f"The module exposes {ports} ports and {params} parameters; no deeper LLM structural summary was provided."
+
+
+def fallback_behavior_summary(module: ModuleInfo) -> str:
+    if module.states:
+        return f"Detected symbolic behavior states: {', '.join(module.states)}."
+    return "No explicit state summary was provided; behavior should be inferred from source RTL and interface timing."
+
+
 def generate_readme(module: ModuleInfo) -> str:
     port_lines = [
-        f"`{port.name}` ({port.direction}, {port.width}): {port.description or 'Extracted port.'}"
+        (
+            f"`{port.name}` ({port.direction}, {port.width}): {port.description}"
+            if port.description
+            else f"`{port.name}` ({port.direction}, {port.width})"
+        )
         for port in module.ports
     ]
     param_lines = [
-        f"`{param.name}` default `{param.default or 'unspecified'}`: {param.description or 'Extracted parameter.'}"
+        (
+            f"`{param.name}` default `{param.default or 'unspecified'}`: {param.description}"
+            if param.description
+            else f"`{param.name}` default `{param.default or 'unspecified'}`"
+        )
         for param in module.parameters
     ] or ["No parameters detected."]
-    behavior = module.states or ["No explicit FSM states detected; behavior inferred from interface and patterns."]
+    functional_summary = module.functional_summary or fallback_functional_summary(module)
+    structural_summary = module.structural_summary or fallback_structural_summary(module)
+    behavior_summary = module.behavior_summary or fallback_behavior_summary(module)
+    integration_notes = module.integration_notes or [
+        "Confirm clock, reset, and ready/valid timing against the source RTL before integration."
+    ]
+    limitations = module.limitations or [
+        "The generated template is an educational stub and is not behaviorally equivalent to the source RTL."
+    ]
+    use_cases = module.use_cases or [
+        f"Use when a design needs {pattern} behavior." for pattern in module.patterns[:4]
+    ] or [f"Use when the `{module.name}` interface matches the target integration."]
     comments = module.comments[:5] or ["No nearby comments were found in the source RTL."]
     return f"""# {module.name}
 
 ## Description
 
-{module.name} was extracted from `{module.source_path}`. Category: `{module.category}`. Detected patterns: {', '.join(module.patterns) or 'none'}.
+{functional_summary}
+
+Category: `{module.category}`. Detected interfaces: {', '.join(module.interfaces) or 'none'}. Detected patterns: {', '.join(module.patterns) or 'none'}.
 
 Source comments:
 
@@ -218,17 +257,23 @@ Source comments:
 
 ## When to use
 
-{markdown_list([f'Use when a design needs {pattern} behavior.' for pattern in module.patterns[:4]] or [f'Use when the `{module.name}` interface matches the target integration.'])}
+{markdown_list(use_cases)}
 
 ## When not to use
 
-- Do not treat the generated template as a production replacement for the source project.
-- Do not use this skill when clock, reset, or protocol assumptions differ from the extracted ports.
-- Do not copy external source code through this skill; `source_refs` are provenance only.
+{markdown_list(limitations)}
 
 ## Architecture
 
-The builder detected `{module.category}` as the category and `{', '.join(module.interfaces)}` as likely interfaces. The local `template.v` preserves the module interface and provides a minimal synthesizable teaching implementation.
+{structural_summary}
+
+## Behavior Model
+
+{behavior_summary}
+
+## Integration Notes
+
+{markdown_list(integration_notes)}
 
 ## Port semantics
 
@@ -237,10 +282,6 @@ The builder detected `{module.category}` as the category and `{', '.join(module.
 ## Parameter semantics
 
 {markdown_list(param_lines)}
-
-## Behavior model
-
-{markdown_list(behavior)}
 
 ## Design pattern
 
@@ -253,11 +294,11 @@ The builder detected `{module.category}` as the category and `{', '.join(module.
 - Reset behavior, if a reset port exists, is exercised by the generated testbench.
 - Output ports have deterministic teaching defaults.
 
-## Common errors
+## Template Scope
 
-- Assuming the generated template preserves every behavior of the original source module.
-- Ignoring unresolved protocol details that require a domain-specific testbench.
-- Using inferred patterns as formal proof instead of review hints.
+- `template.v` preserves the interface shape for teaching and smoke-test purposes.
+- `source_refs` are provenance only; generated files do not copy upstream implementation RTL.
+- Passing the generated smoke test is not functional equivalence to the source module.
 """
 
 
@@ -266,7 +307,7 @@ def module_info_json(module: ModuleInfo) -> str:
         "name": module.name,
         "skill_type": "module",
         "category": module.category,
-        "description": f"Auto-generated RTL skill for {module.name}.",
+        "description": module.functional_summary or fallback_functional_summary(module),
         "source_refs": [
             {
                 "project": "input_repository",
@@ -279,17 +320,32 @@ def module_info_json(module: ModuleInfo) -> str:
                 "notes": "Reference only; generated template does not copy source RTL.",
             }
         ],
-        "parameters": [param.__dict__ for param in module.parameters],
+        "parameters": [
+            {
+                key: value
+                for key, value in {
+                    "name": param.name,
+                    "default": param.default,
+                    "description": param.description,
+                }.items()
+                if key != "description" or value
+            }
+            for param in module.parameters
+        ],
         "ports": [
             {
-                "name": port.name,
-                "direction": port.direction,
-                "width": port.width,
-                "description": port.description,
+                key: value
+                for key, value in {
+                    "name": port.name,
+                    "direction": port.direction,
+                    "width": port.width,
+                    "description": port.description,
+                }.items()
+                if key != "description" or value
             }
             for port in module.ports
         ],
-        "states": [{"name": state, "description": "Detected FSM state or symbolic state name."} for state in module.states],
+        "states": [{"name": state} for state in module.states],
         "constraints": [
             "Review generated template before production use.",
             "source_refs are provenance only and are not runtime dependencies.",
@@ -297,9 +353,15 @@ def module_info_json(module: ModuleInfo) -> str:
         "dependencies": [],
         "interfaces": module.interfaces,
         "patterns": module.patterns,
+        "functional_summary": module.functional_summary or fallback_functional_summary(module),
+        "structural_summary": module.structural_summary or fallback_structural_summary(module),
+        "behavior_summary": module.behavior_summary or fallback_behavior_summary(module),
+        "integration_notes": module.integration_notes,
+        "limitations": module.limitations,
+        "use_cases": module.use_cases,
         "implementation_notes": [
-            "Generated by deterministic parsing plus structured LLM classification.",
-            "Template preserves interface shape and uses a simplified teaching implementation.",
+            "Generated by deterministic RTL analysis plus structured LLM module analysis.",
+            "Template is a simplified teaching implementation; use source_refs and copied RTL closure for provenance.",
         ],
         "test_strategy": [
             "Compile template.v and generated testbench with iverilog -g2012.",

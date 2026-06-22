@@ -89,6 +89,10 @@ def clean_name(name: str) -> str:
     return name
 
 
+def is_identifier(name: str) -> bool:
+    return bool(re.match(r"^[a-zA-Z_][a-zA-Z0-9_$]*$", name))
+
+
 def parse_parameters(param_text: str | None) -> list[Parameter]:
     if not param_text:
         return []
@@ -104,10 +108,10 @@ def parse_parameters(param_text: str | None) -> list[Parameter]:
             continue
         if "=" in item:
             name, default = item.split("=", 1)
-            params.append(Parameter(clean_name(name), default.strip(), "Extracted Verilog parameter."))
+            params.append(Parameter(clean_name(name), default.strip(), ""))
         else:
-            params.append(Parameter(clean_name(item), "", "Extracted Verilog parameter."))
-    return [param for param in params if param.name]
+            params.append(Parameter(clean_name(item), "", ""))
+    return [param for param in params if is_identifier(param.name)]
 
 
 def parse_parameter_infos(param_text: str | None, source: SourceLocation) -> list[ParameterInfo]:
@@ -137,19 +141,19 @@ def parse_ansi_ports(port_text: str) -> list[Port]:
             names = match.group(4)
         else:
             if not last_direction:
-                ports.append(Port(clean_name(item), "input", "1", "wire", "Implicit ANSI port."))
+                ports.append(Port(clean_name(item), "input", "1", "wire", ""))
                 continue
             names = item
         for name_part in split_top_level(names):
             name = clean_name(name_part)
-            if name:
+            if is_identifier(name):
                 ports.append(
                     Port(
                         name=name,
                         direction=last_direction,
                         width=last_width,
                         data_type=last_type,
-                        description=f"{last_direction} port extracted from module header.",
+                        description="",
                     )
                 )
     return ports
@@ -163,13 +167,13 @@ def parse_body_ports(body: str, header_ports: list[Port]) -> list[Port]:
         width = parse_width(match.group("width"))
         for name_part in split_top_level(match.group("names")):
             name = clean_name(name_part)
-            if name:
+            if is_identifier(name):
                 ports_by_name[name] = Port(
                     name=name,
                     direction=direction,
                     width=width,
                     data_type=data_type,
-                    description=f"{direction} port extracted from declaration.",
+                    description="",
                 )
     return list(ports_by_name.values())
 
