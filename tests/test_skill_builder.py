@@ -7,7 +7,13 @@ import pytest
 
 from src.skill_builder.builder import build_skill_library
 from src.skill_builder.frontend import parse_project
-from src.skill_builder.hierarchy import build_module_hierarchy, build_skill_candidates, compute_dependency_closure
+from src.skill_builder.hierarchy import (
+    build_module_hierarchy,
+    build_skill_candidates,
+    compute_dependency_closure,
+    mermaid_dependency_graph,
+    module_dependency_graph,
+)
 from src.skill_builder.parser import parse_modules
 from src.skill_builder.schema import validate_module_info
 
@@ -267,6 +273,13 @@ module top(input wire clk); middle u_middle(.clk(clk)); endmodule
     assert candidate.candidate_kind == "composite"
     assert candidate.dependency_modules == ["middle", "leaf"]
     assert len(candidate.source_files) == 1
+    graph = module_dependency_graph(build_module_hierarchy(parse_project([rtl])))
+    assert graph["direct_edges"]["top"] == ["middle"]
+    assert graph["direct_edges"]["middle"] == ["leaf"]
+    assert graph["closure_edges"]["top"] == ["middle", "leaf"]
+    mermaid = mermaid_dependency_graph(build_module_hierarchy(parse_project([rtl])), closure=True)
+    assert "m_top --> m_middle" in mermaid
+    assert "m_top --> m_leaf" in mermaid
 
 
 def test_skill_candidate_shared_dependency_is_deduped(tmp_path: Path) -> None:
@@ -381,6 +394,11 @@ def test_sample_repo_golden_output(tmp_path: Path) -> None:
     ]
     assert report["frontend"]["unresolved_dependencies"] == {}
     assert report["frontend"]["parse_warnings"]
+    assert (output / "dependency_graph.mmd").exists()
+    assert (output / "dependency_closure_graph.mmd").exists()
+    assert report["dependency_graph"]["direct_edges"]["simple_fifo"] == []
+    assert report["dependency_graph"]["closure_edges"]["simple_fifo"] == []
+    assert report["dependency_graph"]["mermaid_closure"].endswith("dependency_closure_graph.mmd")
     assert (output / "report.json").exists()
     assert all(skill["sim_ok"] for skill in report["skills"])
 

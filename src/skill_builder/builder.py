@@ -20,6 +20,8 @@ from .generator import (
 )
 from .hierarchy import build_module_hierarchy
 from .hierarchy import build_skill_candidates
+from .hierarchy import mermaid_dependency_graph
+from .hierarchy import module_dependency_graph
 from .models import ModuleInfo, SkillCandidate, VerificationResult
 from .scanner import scan_rtl_files
 from .schema import validate_module_info
@@ -259,6 +261,11 @@ def build_skill_library(
     rtl_files = scan_rtl_files(repo_path)
     module_irs = parse_project(rtl_files)
     hierarchy = build_module_hierarchy(module_irs)
+    dependency_graph = module_dependency_graph(hierarchy)
+    direct_graph_path = output_root / "dependency_graph.mmd"
+    closure_graph_path = output_root / "dependency_closure_graph.mmd"
+    atomic_write_text(direct_graph_path, mermaid_dependency_graph(hierarchy, closure=False))
+    atomic_write_text(closure_graph_path, mermaid_dependency_graph(hierarchy, closure=True))
     candidates = build_skill_candidates(hierarchy, include_internal=candidate_mode == "all")
     modules: list[ModuleInfo] = []
     module_candidate_pairs: list[tuple[ModuleInfo, SkillCandidate]] = []
@@ -329,6 +336,11 @@ def build_skill_library(
             },
             "duplicate_modules": hierarchy.duplicate_modules,
             "parse_warnings": sorted(set(parse_warnings)),
+        },
+        "dependency_graph": {
+            **dependency_graph,
+            "mermaid_direct": str(direct_graph_path),
+            "mermaid_closure": str(closure_graph_path),
         },
         "candidates": {"total": len(candidates), **candidate_counts},
         "dependencies": {

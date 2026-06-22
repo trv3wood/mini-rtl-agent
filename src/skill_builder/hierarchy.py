@@ -269,3 +269,69 @@ def build_skill_candidates(hierarchy: ModuleHierarchy, *, include_internal: bool
             candidate.candidate_kind = "internal"
         candidates.append(candidate)
     return candidates
+
+
+def transitive_dependency_map(hierarchy: ModuleHierarchy) -> dict[str, list[str]]:
+    closure: dict[str, list[str]] = {}
+
+    def visit(module_name: str, path: list[str], seen: set[str]) -> list[str]:
+        dependencies: list[str] = []
+        for dependency in sorted(hierarchy.edges.get(module_name, set())):
+            if dependency in path:
+                if dependency not in dependencies:
+                    dependencies.append(dependency)
+                continue
+            if dependency not in dependencies:
+                dependencies.append(dependency)
+            if dependency in seen:
+                continue
+            seen.add(dependency)
+            for nested in visit(dependency, [*path, dependency], seen):
+                if nested not in dependencies:
+                    dependencies.append(nested)
+        return dependencies
+
+    for module_name in sorted(hierarchy.modules):
+        closure[module_name] = visit(module_name, [module_name], set())
+    return closure
+
+
+def module_dependency_graph(hierarchy: ModuleHierarchy) -> dict:
+    closure = transitive_dependency_map(hierarchy)
+    return {
+        "modules": sorted(hierarchy.modules),
+        "roots": hierarchy.roots,
+        "direct_edges": {
+            module_name: sorted(dependencies)
+            for module_name, dependencies in sorted(hierarchy.edges.items())
+        },
+        "closure_edges": closure,
+        "unresolved_dependencies": {
+            module_name: sorted(dependencies)
+            for module_name, dependencies in sorted(hierarchy.unresolved_dependencies.items())
+        },
+        "duplicate_modules": hierarchy.duplicate_modules,
+    }
+
+
+def _mermaid_id(module_name: str) -> str:
+    return f"m_{sanitize_skill_name(module_name)}"
+
+
+def _mermaid_label(module_name: str) -> str:
+    return module_name.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def mermaid_dependency_graph(hierarchy: ModuleHierarchy, *, closure: bool = True) -> str:
+    graph = module_dependency_graph(hierarchy)
+    edges = graph["closure_edges"] if closure else graph["direct_edges"]
+    lines = ["flowchart TD"]
+    for module_name in graph["modules"]:
+        lines.append(f'  {_mermaid_id(module_name)}["{_mermaid_label(module_name)}"]')
+    for module_name, dependencies in edges.items():
+        for dependency in dependencies:
+            if dependency in hierarchy.modules:
+                lines.append(f"  {_mermaid_id(module_name)} --> {_mermaid_id(dependency)}")
+    if len(lines) == 1:
+        lines.append("  empty[\"No modules detected\"]")
+    return "\n".join(lines) + "\n"
