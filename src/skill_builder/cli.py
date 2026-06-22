@@ -22,11 +22,22 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Remove previously generated skill directories in the output before rebuilding.",
     )
+    build_parser.add_argument(
+        "--candidate-mode",
+        choices=("all", "roots"),
+        default="all",
+        help="Select skill candidates: all modules for compatibility, or root modules only.",
+    )
 
     args = parser.parse_args(argv)
     if args.command == "build":
         try:
-            report = build_skill_library(Path(args.repo_path), Path(args.output), clean=args.clean)
+            report = build_skill_library(
+                Path(args.repo_path),
+                Path(args.output),
+                clean=args.clean,
+                candidate_mode=args.candidate_mode,
+            )
         except SkillBuilderError as exc:
             print(f"ERROR: {exc}")
             return 1

@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .models import ModuleInfo, Parameter, Port
+from .models import InstanceInfo, ModuleIR, ModuleInfo, Parameter, ParameterInfo, Port, PortInfo, SourceLocation
 
 
 MODULE_RE = re.compile(
@@ -16,6 +16,28 @@ DECL_RE = re.compile(
     re.S,
 )
 STATE_NAME_RE = re.compile(r"\b(?:localparam|parameter)\b[^;=]*?\b([A-Z][A-Z0-9_]{2,})\b\s*=", re.S)
+INSTANCE_RE = re.compile(
+    r"\b(?P<module>[a-zA-Z_][a-zA-Z0-9_$]*)\s*"
+    r"(?:#\s*\((?P<params>.*?)\)\s*)?"
+    r"(?P<instance>[a-zA-Z_][a-zA-Z0-9_$]*)\s*"
+    r"\((?P<ports>.*?)\)\s*;",
+    re.S,
+)
+INSTANCE_KEYWORDS = {
+    "always",
+    "assign",
+    "case",
+    "else",
+    "for",
+    "forever",
+    "function",
+    "generate",
+    "if",
+    "initial",
+    "module",
+    "task",
+    "while",
+}
 
 
 def strip_comments(text: str) -> str:
@@ -88,6 +110,13 @@ def parse_parameters(param_text: str | None) -> list[Parameter]:
     return [param for param in params if param.name]
 
 
+def parse_parameter_infos(param_text: str | None, source: SourceLocation) -> list[ParameterInfo]:
+    return [
+        ParameterInfo(param.name, param.default or None, "parameter", source)
+        for param in parse_parameters(param_text)
+    ]
+
+
 def parse_ansi_ports(port_text: str) -> list[Port]:
     ports: list[Port] = []
     last_direction = ""
@@ -145,6 +174,71 @@ def parse_body_ports(body: str, header_ports: list[Port]) -> list[Port]:
     return list(ports_by_name.values())
 
 
+def source_location_for_offset(text: str, path: Path, start: int, end: int | None = None) -> SourceLocation:
+    line_start = text.count("\n", 0, start) + 1
+    line_end = text.count("\n", 0, end if end is not None else start) + 1
+    return SourceLocation(str(path), line_start, line_end)
+
+
+def split_named_connections(text: str) -> dict[str, str]:
+    connections: dict[str, str] = {}
+    for item in split_top_level(strip_comments(text)):
+        item = item.strip()
+        match = re.match(r"^\.(?P<name>[a-zA-Z_][a-zA-Z0-9_$]*)\s*\((?P<expr>.*)\)$", item, re.S)
+        if match:
+            connections[match.group("name")] = " ".join(match.group("expr").split())
+    return connections
+
+
+def parse_instances(body: str, full_text: str, path: Path, body_offset: int, current_module: str) -> list[InstanceInfo]:
+    instances: list[InstanceInfo] = []
+    clean_body = strip_comments(body)
+    for match in INSTANCE_RE.finditer(clean_body):
+        module_name = match.group("module")
+        instance_name = match.group("instance")
+        if module_name in INSTANCE_KEYWORDS:
+            continue
+        if module_name in {"input", "output", "inout", "wire", "reg", "logic", "parameter", "localparam"}:
+            continue
+        instances.append(
+            InstanceInfo(
+                module_name=module_name,
+                instance_name=instance_name,
+                parameter_overrides=split_named_connections(match.group("params") or ""),
+                port_connections=split_named_connections(match.group("ports") or ""),
+                source=source_location_for_offset(
+                    full_text,
+                    path,
+                    body_offset + match.start(),
+                    body_offset + match.end(),
+                ),
+            )
+        )
+    return instances
+
+
+def detect_clock_candidates(ports: list[PortInfo]) -> list[str]:
+    candidates = []
+    for port in ports:
+        lowered = port.name.lower()
+        if port.direction == "input" and (lowered in {"clk", "clock", "aclk"} or "clk" in lowered):
+            candidates.append(port.name)
+    return candidates
+
+
+def detect_reset_candidates(ports: list[PortInfo]) -> list[str]:
+    candidates = []
+    for port in ports:
+        lowered = port.name.lower()
+        if port.direction == "input" and ("rst" in lowered or "reset" in lowered):
+            candidates.append(port.name)
+    return candidates
+
+
+def port_to_info(port: Port, source: SourceLocation) -> PortInfo:
+    return PortInfo(port.name, port.direction, port.width, port.data_type, source)
+
+
 def detect_states(text: str) -> list[str]:
     states = []
     for state in STATE_NAME_RE.findall(text):
@@ -158,8 +252,12 @@ def detect_states(text: str) -> list[str]:
 
 
 def parse_modules(path: Path) -> list[ModuleInfo]:
+    return [module.to_module_info() for module in parse_modules_with_regex(path)]
+
+
+def parse_modules_with_regex(path: Path) -> list[ModuleIR]:
     text = path.read_text(encoding="utf-8", errors="ignore")
-    modules: list[ModuleInfo] = []
+    modules: list[ModuleIR] = []
     for match in MODULE_RE.finditer(text):
         name = match.group(1)
         next_module = MODULE_RE.search(text, match.end())
@@ -167,16 +265,27 @@ def parse_modules(path: Path) -> list[ModuleInfo]:
         body = text[match.end() : end]
         ports = parse_ansi_ports(match.group("ports"))
         ports = parse_body_ports(body, ports)
+        source = source_location_for_offset(text, path, match.start(), end)
+        port_infos = [port_to_info(port, source) for port in ports]
         modules.append(
-            ModuleInfo(
+            ModuleIR(
                 name=name,
-                source_path=path,
-                parameters=parse_parameters(match.group("params")),
-                ports=ports,
+                source_file=str(path),
+                parameters=parse_parameter_infos(match.group("params"), source),
+                ports=port_infos,
+                instances=parse_instances(body, text, path, match.end(), name),
+                clock_candidates=detect_clock_candidates(port_infos),
+                reset_candidates=detect_reset_candidates(port_infos),
+                parse_backend="regex",
+                syntax_backend="regex",
+                instance_backend="regex",
+                parameter_backend="regex",
+                port_backend="regex",
+                semantic_status="not_run",
+                parse_warnings=[],
                 comments=extract_comments(text[: match.start()] + body),
                 states=detect_states(body),
                 source_text=body,
             )
         )
     return modules
-

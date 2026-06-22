@@ -187,7 +187,7 @@ The planner makes a second LLM call to map each LLM-produced submodule onto the 
 
 ## Automated RTL Skill Builder
 
-The builder converts a local Verilog/SystemVerilog repository into reusable skill packages. Parsing and file extraction are deterministic; module classification is an LLM call that returns structured `category`, `interfaces`, `patterns`, and `keywords`.
+The builder converts a local Verilog/SystemVerilog repository into reusable skill packages. The RTL frontend is deterministic: it tries `pyslang` first, falls back to the local regex parser when needed, builds module dependency candidates, and then uses an LLM call only for structured `category`, `interfaces`, `patterns`, and `keywords`.
 
 ```sh
 python3 -m skill_builder build <repo_path>
@@ -199,15 +199,22 @@ By default it writes to `./work/built_skills`, which is ignored by git. Use `--o
 python3 -m skill_builder build work/sample_rtl_repo --output work/built_skills
 ```
 
+Candidate selection defaults to compatibility mode, where every extracted module becomes a candidate. Use root-only mode to emit only root candidates:
+
+```sh
+python3 -m skill_builder build work/sample_rtl_repo --candidate-mode roots
+```
+
 Pipeline:
 
-- Recursively scans for `*.v` and `*.sv`.
+- Recursively scans for `*.v`, `*.sv`, `*.vh`, and `*.svh`.
 - Ignores docs, images, build outputs, simulation outputs, and generated artifacts.
-- Extracts module names, parameters, ports, comments, likely FSM states, and common patterns.
+- Extracts module names, parameters, ports, comments, likely FSM states, instances, and common patterns.
+- Builds `SkillCandidate` dependency closures from root/internal modules and classifies unresolved dependencies.
 - Classifies skills by category, interfaces, keywords, and design patterns through the configured LLM.
-- Emits `module_info.json`, LLM-facing `README.md`, educational `template.v`, `examples/instantiation.v`, and `examples/tb_<module>.v`.
-- Runs generated testbenches with `iverilog -g2012` and `vvp` when available.
-- Writes `report.json` with per-skill quality scores across metadata, interface, documentation, verification, and template usability.
+- Emits `module_info.json`, LLM-facing `README.md`, educational `template.v`, `manifest.json`, `quality.json`, copied closure sources under `rtl/`, `examples/instantiation.v`, and `examples/tb_<module>.v`.
+- Runs staged verification when `iverilog`/`vvp` are available: source-closure compile, generated testbench compile, then smoke simulation.
+- Writes `report.json` with frontend, candidate, dependency, staged verification, quality-tier, and legacy per-skill fields.
 
 Try the included local sample:
 
@@ -225,11 +232,13 @@ The generated templates are intentionally simplified teaching implementations. T
 
 ### Known Limitations
 
-- The parser is heuristic and regex/text based; it is not a full Verilog/SystemVerilog front end.
+- The frontend uses `pyslang` for syntax acceptance, but metadata extraction still depends on deterministic walkers and regex fallback.
 - Builder classification and architecture skill mapping depend on the configured LLM and can vary by provider/model.
-- SystemVerilog support is partial and focused on common module headers, parameters, ports, comments, and simple pattern detection.
+- SystemVerilog support is partial and focused on common module headers, parameters, ports, instances, comments, and simple pattern detection.
+- Dependency closure quality depends on extracted instance edges; complex generate/package/interface constructs can still produce unresolved dependencies.
 - Extracted comments may be incomplete or may miss comments that are far from the module declaration.
 - Generated `template.v` files are educational and reproducible, not production-ready replacements for the source RTL.
+- `gold_candidate` means generated smoke checks passed; it is not a claim of functional correctness.
 - `source_refs` are provenance records only; they are not runtime dependencies and the builder does not download external code.
 
 ## Notes

@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 
 from src.skill_builder.builder import build_skill_library
+from src.skill_builder.frontend import parse_project
+from src.skill_builder.hierarchy import build_module_hierarchy, build_skill_candidates, compute_dependency_closure
 from src.skill_builder.parser import parse_modules
 from src.skill_builder.schema import validate_module_info
 
@@ -149,6 +151,204 @@ module second(input wire clk, output wire done); endmodule
     assert [module.name for module in parse_modules(rtl)] == ["first", "second"]
 
 
+def test_frontend_extracts_module_ir_instances_and_hierarchy(tmp_path: Path) -> None:
+    rtl = write(
+        tmp_path / "top.sv",
+        """
+module child(input logic clk);
+endmodule
+
+module top(input logic clk);
+    child u_child (.clk(clk));
+    external_ip u_ip (.clk(clk));
+endmodule
+
+module island(input logic clk);
+endmodule
+""",
+    )
+    modules = parse_project([rtl])
+    by_name = {module.name: module for module in modules}
+    assert set(by_name) == {"child", "top", "island"}
+    assert by_name["top"].parse_backend in {"pyslang", "regex"}
+    assert by_name["top"].instances[0].module_name == "child"
+    assert by_name["top"].instances[0].port_connections == {"clk": "clk"}
+
+    hierarchy = build_module_hierarchy(modules)
+    assert hierarchy.edges["top"] == {"child"}
+    assert hierarchy.roots == ["island", "top"]
+    assert hierarchy.unresolved_dependencies == {"top": {"external_ip"}}
+
+
+def test_pyslang_instance_extractor_ignores_procedural_constructs(tmp_path: Path) -> None:
+    rtl = write(
+        tmp_path / "ast_instances.sv",
+        """
+module child(input logic clk); endmodule
+module top(input logic clk);
+    for (genvar i = 0; i < 4; i++) begin : g
+        child u_child(.clk(clk));
+    end
+    function automatic logic bin2gray(input logic value);
+        return value ^ (value >> 1);
+    endfunction
+    initial begin
+        $display("test");
+        $error("error");
+    end
+endmodule
+""",
+    )
+    modules = parse_project([rtl])
+    top = {module.name: module for module in modules}["top"]
+    assert top.instance_backend == "pyslang_ast"
+    assert [(inst.module_name, inst.instance_name) for inst in top.instances] == [("child", "u_child")]
+    hierarchy = build_module_hierarchy(modules)
+    assert hierarchy.unresolved_dependencies == {}
+
+
+def test_pyslang_instance_extractor_handles_parameterized_instance(tmp_path: Path) -> None:
+    rtl = write(
+        tmp_path / "param_inst.sv",
+        """
+module axis_fifo #(parameter DEPTH = 4) (input logic clk); endmodule
+module top(input logic clk);
+    axis_fifo #(
+        .DEPTH(16)
+    ) u_fifo (
+        .clk(clk)
+    );
+endmodule
+""",
+    )
+    top = {module.name: module for module in parse_project([rtl])}["top"]
+    assert len(top.instances) == 1
+    inst = top.instances[0]
+    assert inst.module_name == "axis_fifo"
+    assert inst.instance_name == "u_fifo"
+    assert inst.parameter_overrides == {"DEPTH": "16"}
+    assert inst.port_connections == {"clk": "clk"}
+    assert inst.source is not None
+    assert inst.source.line_start is not None
+
+
+def test_hierarchy_keeps_self_recursive_module_as_root(tmp_path: Path) -> None:
+    rtl = write(
+        tmp_path / "self_ref.v",
+        """
+module self_ref(input wire clk);
+    self_ref u_self (.clk(clk));
+endmodule
+""",
+    )
+    hierarchy = build_module_hierarchy(parse_project([rtl]))
+    assert hierarchy.edges["self_ref"] == {"self_ref"}
+    assert hierarchy.roots == ["self_ref"]
+
+
+def test_skill_candidate_standalone_closure(tmp_path: Path) -> None:
+    rtl = write(tmp_path / "one.v", "module one(input wire clk); endmodule\n")
+    candidate = compute_dependency_closure("one", build_module_hierarchy(parse_project([rtl])))
+    assert candidate.candidate_kind == "standalone"
+    assert candidate.dependency_modules == []
+    assert candidate.is_self_contained is True
+
+
+def test_skill_candidate_single_and_multilevel_dependencies(tmp_path: Path) -> None:
+    rtl = write(
+        tmp_path / "deps.v",
+        """
+module leaf(input wire clk); endmodule
+module middle(input wire clk); leaf u_leaf(.clk(clk)); endmodule
+module top(input wire clk); middle u_middle(.clk(clk)); endmodule
+""",
+    )
+    candidate = compute_dependency_closure("top", build_module_hierarchy(parse_project([rtl])))
+    assert candidate.candidate_kind == "composite"
+    assert candidate.dependency_modules == ["middle", "leaf"]
+    assert len(candidate.source_files) == 1
+
+
+def test_skill_candidate_shared_dependency_is_deduped(tmp_path: Path) -> None:
+    rtl = write(
+        tmp_path / "shared.v",
+        """
+module common(input wire clk); endmodule
+module a(input wire clk); common u_common(.clk(clk)); endmodule
+module b(input wire clk); common u_common(.clk(clk)); endmodule
+module top(input wire clk); a u_a(.clk(clk)); b u_b(.clk(clk)); endmodule
+""",
+    )
+    candidate = compute_dependency_closure("top", build_module_hierarchy(parse_project([rtl])))
+    assert candidate.dependency_modules.count("common") == 1
+    assert candidate.dependency_modules == ["a", "common", "b"]
+
+
+def test_skill_candidate_cycle_is_reported(tmp_path: Path) -> None:
+    rtl = write(
+        tmp_path / "cycle.v",
+        """
+module a(input wire clk); b u_b(.clk(clk)); endmodule
+module b(input wire clk); a u_a(.clk(clk)); endmodule
+""",
+    )
+    candidate = compute_dependency_closure("a", build_module_hierarchy(parse_project([rtl])))
+    assert candidate.candidate_kind == "cyclic"
+    assert candidate.hierarchy_warnings
+
+
+def test_skill_candidate_external_dependency_is_unresolved(tmp_path: Path) -> None:
+    rtl = write(tmp_path / "missing.v", "module top(input wire clk); missing_ip u_ip(.clk(clk)); endmodule\n")
+    candidate = compute_dependency_closure("top", build_module_hierarchy(parse_project([rtl])))
+    assert candidate.unresolved_dependencies == ["missing_ip"]
+    assert candidate.is_self_contained is False
+    assert candidate.candidate_kind == "unresolved"
+
+
+def test_vendor_primitive_dependency_is_classified(tmp_path: Path) -> None:
+    rtl = write(tmp_path / "vendor.v", "module top(input wire clk); RAMB36E1 u_ram(); endmodule\n")
+    candidate = compute_dependency_closure("top", build_module_hierarchy(parse_project([rtl])))
+    assert candidate.vendor_primitives == ["RAMB36E1"]
+    assert candidate.unresolved_dependencies == []
+
+
+def test_builder_reports_generated_tb_compile_failure_separately(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    write(
+        repo / "rtl" / "tb_fail.v",
+        """
+module tb_fail(input wire clk, input wire [WIDTH-1:0] data);
+localparam WIDTH = 8;
+endmodule
+""",
+    )
+    report = build_skill_library(repo, tmp_path / "skills", clean=True, llm=FakeClassifierLLM())
+    skill = report["skills"][0]
+    assert skill["verification"]["source_compile"] == "passed"
+    assert skill["verification"]["generated_tb_compile"] == "failed"
+    assert skill["verification"]["failure_stage"] == "generated_tb_compile"
+
+
+def test_builder_reports_dependency_closure_incomplete(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    write(repo / "rtl" / "top.v", "module top(input wire clk); child u_child(.clk(clk)); endmodule\n")
+    report = build_skill_library(repo, tmp_path / "skills", clean=True, llm=FakeClassifierLLM())
+    skill = report["skills"][0]
+    assert skill["unresolved_dependencies"] == ["child"]
+    assert skill["verification"]["failure_category"] == "dependency_closure_incomplete"
+
+
+def test_duplicate_module_definitions_are_reported(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    write(repo / "rtl" / "a.v", "module dup(input wire clk); endmodule\n")
+    write(repo / "alt" / "a.v", "module dup(input wire clk); endmodule\n")
+    report = build_skill_library(repo, tmp_path / "skills", clean=True, llm=FakeClassifierLLM())
+    assert "dup" in report["dependencies"]["duplicate_modules"]
+    assert all(skill["candidate_kind"] == "unresolved" for skill in report["skills"])
+    assert all(skill["quality_tier"] == "rejected" for skill in report["skills"])
+    assert all(skill["verification"]["failure_category"] == "duplicate_module_definition" for skill in report["skills"])
+
+
 def test_malformed_file_does_not_crash_builder(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     write(repo / "rtl" / "broken.v", "module broken(input wire clk\n")
@@ -171,6 +371,16 @@ def test_sample_repo_golden_output(tmp_path: Path) -> None:
     report = build_skill_library(repo, output, clean=True, llm=FakeClassifierLLM())
 
     assert report["skills_generated"] == 4
+    assert sum(report["frontend"]["backend_counts"].values()) == 4
+    assert report["frontend"]["module_count"] == 4
+    assert sorted(report["frontend"]["root_modules"]) == [
+        "pulse_counter",
+        "reset_sync",
+        "round_robin",
+        "simple_fifo",
+    ]
+    assert report["frontend"]["unresolved_dependencies"] == {}
+    assert report["frontend"]["parse_warnings"]
     assert (output / "report.json").exists()
     assert all(skill["sim_ok"] for skill in report["skills"])
 

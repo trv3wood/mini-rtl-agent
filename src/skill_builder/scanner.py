@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-RTL_SUFFIXES = {".v", ".sv"}
+RTL_SUFFIXES = {".v", ".sv", ".vh", ".svh"}
 IGNORE_DIR_NAMES = {
     ".git",
     ".hg",

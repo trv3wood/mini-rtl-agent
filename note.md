@@ -14,9 +14,11 @@ The repository now has four related flows:
 2. An RTL Skill Builder:
    - CLI: `python3 -m skill_builder build <repo_path>`.
    - Optional clean rebuild: `--clean`.
-   - Deterministic parsing and file extraction.
+   - Deterministic RTL frontend with `pyslang` first and regex fallback.
+   - Module hierarchy/root/unresolved-dependency reporting.
+   - SkillCandidate dependency closure with staged source compile, generated testbench compile, and simulation reporting.
    - LLM-based module classification for category, interfaces, keywords, and patterns.
-   - Scans `.v` and `.sv` files.
+   - Scans `.v`, `.sv`, `.vh`, and `.svh` files.
    - Ignores docs, images, build outputs, generated files, and test outputs.
    - Extracts module names, parameters, ports, nearby comments, simple FSM hints, and common design patterns.
    - Generates skill packages:
@@ -26,6 +28,9 @@ work/built_skills/<skill_name>/
   module_info.json
   README.md
   template.v
+  manifest.json
+  quality.json
+  rtl/
   examples/
     instantiation.v
     tb_<module>.v
@@ -183,11 +188,23 @@ The builder was run against open-source repositories already cloned under `/tmp`
 Summary:
 
 ```text
-verilog-uart-provenance: scanned 30, modules 28, skills 28, failed 0
-verilog-axis-provenance: scanned 85, modules 31, skills 31, failed 5
-generic-fifos-provenance: scanned 8, modules 6, skills 6, failed 6
-i2c-provenance: scanned 7, modules 7, skills 7, failed 1
-spi-provenance: scanned 8, modules 6, skills 6, failed 1
+Default compatibility mode is `--candidate-mode all`.
+
+verilog-uart-provenance: modules 28, skills 28, candidates {internal 1, unresolved 27}, source_pass 18, source_fail 10, tb_pass 18, tb_fail 0, sim_pass 18, sim_skip 10, tiers {rejected 27, gold_candidate 1}
+verilog-axis-provenance: modules 31, skills 31, candidates {standalone 16, composite 8, internal 7, unresolved 0}, source_pass 31, source_fail 0, tb_pass 26, tb_fail 5, sim_pass 26, sim_skip 5, tiers {silver 5, gold_candidate 26}
+generic-fifos-provenance: modules 6, skills 6, candidates {standalone 1, unresolved 5}, source_pass 0, source_fail 6, tb_pass 0, tb_fail 0, sim_pass 0, sim_skip 6, tiers {rejected 5, bronze 1}
+i2c-provenance: modules 7, skills 7, candidates {unresolved 7}, source_pass 3, source_fail 4, tb_pass 2, tb_fail 1, sim_pass 2, sim_skip 5, tiers {rejected 7}
+spi-provenance: modules 6, skills 6, candidates {internal 2, unresolved 4}, source_pass 0, source_fail 6, tb_pass 0, tb_fail 0, sim_pass 0, sim_skip 6, tiers {rejected 4, bronze 2}
+```
+
+Root-only mode:
+
+```text
+verilog-uart-provenance: modules 28, skills 25, unresolved 25, source_pass 15, source_fail 10, tb_pass 15, sim_pass 15
+verilog-axis-provenance: modules 31, skills 24, standalone 16, composite 8, unresolved 0, source_pass 24, source_fail 0, tb_pass 21, tb_fail 3, sim_pass 21
+generic-fifos-provenance: modules 6, skills 6, standalone 1, unresolved 5, source_pass 0, source_fail 6
+i2c-provenance: modules 7, skills 2, unresolved 2, source_pass 0, source_fail 2
+spi-provenance: modules 6, skills 1, unresolved 1, source_pass 0, source_fail 1
 ```
 
 Known failed generated testbenches:
@@ -208,12 +225,16 @@ wb_master_model
 ```
 
 These failures are useful signal: the smoke test is exposing the current deterministic template generator boundary rather than hiding it.
+The staged verifier now separates source-closure failures from generated testbench compile failures and simulation runtime failures.
+Latest verilog-axis retest uses `pyslang_ast` for instance extraction; false unresolved names such as `begin/end/i/clo/fo/cas/unsigne/bin2gra/gray2bi/displa/erro` are no longer present in unresolved dependencies.
 
 ## Current Boundaries
 
-- The parser is heuristic and regex/text based. It is not a full Verilog/SystemVerilog frontend.
-- SystemVerilog support is partial.
-- Non-ANSI and ANSI module headers are covered by tests, but complex generate blocks, interfaces, packages, macros, typedefs, modports, and parameter types remain weak spots.
+- The frontend uses `pyslang` for syntax acceptance when available, then deterministic walkers/regex fallback to populate `ModuleIR`.
+- SystemVerilog extraction is still partial even when `pyslang` accepts the syntax.
+- Non-ANSI and ANSI module headers are covered by tests, but complex generate blocks, interfaces, packages, macros, typedefs, modports, and parameter types remain weak spots for metadata extraction.
+- Dependency closure currently depends on deterministically extracted instances; missed or false-positive instance extraction directly affects candidate quality.
+- Quality tier `gold_candidate` means staged smoke passed, not functional correctness.
 - Comment extraction is local and may miss design intent far away from the module declaration.
 - FSM detection is shallow. It catches common symbolic state names and `case(state)` style patterns, but it is not semantic analysis.
 - Builder classification is LLM-based. It can vary by provider/model and should be reviewed before treating generated skill metadata as authoritative.
@@ -246,9 +267,9 @@ These failures are useful signal: the smoke test is exposing the current determi
    - simulation score
    - pattern-confidence score
 
-4. Add an optional parser backend later:
-   - Surelog/UHDM, slang, tree-sitter, or Pyverilog.
-   - Keep deterministic regex parser as the zero-dependency fallback.
+4. Deepen the `pyslang` frontend:
+   - Extract ports, parameters, packages, typedefs, interfaces, and instances from syntax/AST nodes instead of regex walkers.
+   - Keep deterministic regex parser as the fallback path for unsupported or malformed files.
 
 5. Use curated `skills/` as golden examples for what high-quality generated packages should eventually resemble.
 
