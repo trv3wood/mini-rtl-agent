@@ -49,6 +49,10 @@ def load_benchmark(path: Path) -> list[BenchmarkCase]:
 
 def evaluate_case(case: BenchmarkCase, results: list[RankedSkill]) -> dict[str, Any]:
     ranked_names = [result.name for result in results]
+    return evaluate_ranked_ids(case, ranked_names)
+
+
+def evaluate_ranked_ids(case: BenchmarkCase, ranked_names: list[str]) -> dict[str, Any]:
     relevant = set(case.relevant_skill_ids)
     first_rank = next((idx + 1 for idx, name in enumerate(ranked_names) if name in relevant), None)
     return {

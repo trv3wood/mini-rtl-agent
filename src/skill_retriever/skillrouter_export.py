@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
+from .benchmark import load_benchmark
 from .models import QueryPlan
 from .retriever import flatten
 
@@ -140,3 +141,52 @@ def prepare_skillrouter_query_data(
     for tier in tiers:
         write_jsonl(records, output_dir / tier / "part-00000.jsonl")
     return {"task": task, "records": len(records), "tiers": tiers, "data_root": str(output_dir)}
+
+
+def prepare_skillrouter_benchmark_data(
+    benchmark_path: Path,
+    skills_root: Path,
+    output_dir: Path,
+    tiers: list[str] | None = None,
+) -> dict[str, Any]:
+    tiers = tiers or ["easy"]
+    invalid_tiers = sorted(set(tiers) - {"easy", "hard"})
+    if invalid_tiers:
+        raise ValueError(f"unsupported SkillRouter tier(s): {', '.join(invalid_tiers)}")
+    cases = load_benchmark(benchmark_path)
+    records = export_skillrouter_records(skills_root)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    tasks = []
+    relevance = {}
+    for case in cases:
+        tasks.append(
+            {
+                "task_id": case.case_id,
+                "domain": "rtl",
+                "instruction_text": query_text_from_plan(case.query_plan),
+                "difficulty": "local",
+                "num_skills": len(case.relevant_skill_ids),
+                "skill_names": case.relevant_skill_ids,
+                "tags": ["rtl", "local-skillrouter-benchmark"],
+                "excluded": False,
+            }
+        )
+        relevance[case.case_id] = {
+            "task_type": "local_benchmark",
+            "gt_skill_ids": case.relevant_skill_ids,
+            "relevance": {skill_id: 1 for skill_id in case.relevant_skill_ids},
+        }
+    write_jsonl(tasks, output_dir / "tasks.jsonl")
+    (output_dir / "relevance.json").write_text(json.dumps(relevance, indent=2) + "\n", encoding="utf-8")
+    manifest = {
+        "dataset_name": "mini-rtl-agent-local-skillrouter-benchmark",
+        "benchmark": str(benchmark_path),
+        "skills_root": str(skills_root),
+        "records": len(records),
+        "tasks": len(tasks),
+        "tiers": tiers,
+    }
+    (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    for tier in tiers:
+        write_jsonl(records, output_dir / tier / "part-00000.jsonl")
+    return {"tasks": len(tasks), "records": len(records), "tiers": tiers, "data_root": str(output_dir)}

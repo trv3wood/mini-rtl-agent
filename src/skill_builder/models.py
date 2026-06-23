@@ -75,6 +75,15 @@ class InstanceInfo:
 
 
 @dataclass
+class StructuralFact:
+    kind: str
+    name: str = ""
+    expression: str = ""
+    source: SourceLocation | None = None
+    backend: str = "regex"
+
+
+@dataclass
 class ModuleIR:
     name: str
     source_file: str
@@ -83,6 +92,10 @@ class ModuleIR:
     instances: list[InstanceInfo] = field(default_factory=list)
     clock_candidates: list[str] = field(default_factory=list)
     reset_candidates: list[str] = field(default_factory=list)
+    memory_candidates: list[StructuralFact] = field(default_factory=list)
+    always_blocks: list[StructuralFact] = field(default_factory=list)
+    continuous_assignments: list[StructuralFact] = field(default_factory=list)
+    assertions: list[StructuralFact] = field(default_factory=list)
     parse_backend: str = "regex"
     syntax_backend: str = "regex"
     instance_backend: str = "regex"

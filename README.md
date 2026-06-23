@@ -120,7 +120,27 @@ The retriever:
 - Penalizes `negative_terms`.
 - Returns ranked skills with `why_matched`, `penalties`, `risks`, and `adaptation_hints`.
 
-LangChain integration is exposed as a tool named `retrieve_rtl_skills`. The tool accepts the same query-plan fields plus optional `skills_root` and `limit`. It does not call an LLM and does not let the model choose the final skill.
+LangChain integration exposes deterministic tools for an upstream LLM agent:
+
+- `retrieve_rtl_skills`: returns ranked skill results and preserves the original retriever JSON output.
+- `route_rtl_skill`: returns the downstream-agent contract with `selected_skill`, `candidate_skills`, matched capabilities, required adaptations, risks, and `source_path`.
+
+Both tools accept the same query-plan fields plus optional `skills_root` and `limit`. `route_rtl_skill` also accepts optional `external_json` and `task_id` to route over fused external SkillRouter results. Neither tool calls an LLM or lets the model choose the final skill.
+
+Return a downstream-agent router response with `selected_skill`, `candidate_skills`, matched capabilities, adaptations, risks, and source path:
+
+```sh
+python3 -m skill_retriever route query_plan.json \
+  --skills-root skills
+```
+
+If external SkillRouter retrieval/rerank output is available, route over the fused ranking:
+
+```sh
+python3 -m skill_retriever route query_plan.json \
+  --skills-root skills \
+  --external-json external/SkillRouter/outputs/local_rtl_query/reranked/easy.json
+```
 
 Export local skills to a SkillRouter-compatible JSONL pool:
 
@@ -142,6 +162,113 @@ python3 -m skill_retriever prepare-skillrouter-query query_plan.json \
 ```
 
 This writes `tasks.jsonl`, `relevance.json`, `manifest.json`, and `easy/part-00000.jsonl`, then prints the external `src.export_retrieval` command to run from `external/SkillRouter/`.
+
+Use the optional adapter to prepare data and print the exact external command without launching the model:
+
+```sh
+python3 -m skill_retriever run-skillrouter-query query_plan.json \
+  --skills-root skills \
+  --external-root external/SkillRouter \
+  --work-dir work/skillrouter_query \
+  --dry-run
+```
+
+When you are ready to run the external embedding model, remove `--dry-run`. The adapter invokes `external/SkillRouter/src.export_retrieval`, reads `outputs/local_rtl_query/retrieval/easy.json`, and fuses those semantic hits with the local lexical/spec-aware ranking.
+
+To also run the released reranker on the retrieved local candidates, use:
+
+```sh
+python3 -m skill_retriever run-skillrouter-query query_plan.json \
+  --skills-root skills \
+  --external-root external/SkillRouter \
+  --work-dir work/skillrouter_query \
+  --mode pipeline
+```
+
+Pipeline mode runs embedding retrieval first, then invokes `scripts/skillrouter_rerank_query.py` with the external SkillRouter virtualenv. This is separate from the external project's `src.run_open_model_eval` benchmark entrypoint, which expects gold labels.
+
+If you run the printed external command manually, import and fuse the existing output without launching models again:
+
+```sh
+python3 -m skill_retriever run-skillrouter-query query_plan.json \
+  --skills-root skills \
+  --external-root external/SkillRouter \
+  --work-dir work/skillrouter_query \
+  --mode pipeline \
+  --use-existing \
+  --format json
+```
+
+For report-friendly comparison between local lexical/spec-aware retrieval, raw external SkillRouter order, and fused ranking:
+
+```sh
+python3 -m skill_retriever compare-skillrouter-query query_plan.json \
+  --skills-root skills \
+  --external-json external/SkillRouter/outputs/local_rtl_query/reranked/easy.json
+```
+
+For benchmark-level comparison, use an external retrieval/reranked JSON whose task IDs match the benchmark case IDs:
+
+```sh
+make router-benchmark
+make skillrouter-benchmark-dry-run
+
+# run the printed external commands manually from external/SkillRouter
+
+make skillrouter-report-existing
+make skillrouter-status
+```
+
+The `make` targets are intentionally split so model execution stays explicit. Override paths as needed:
+
+```sh
+make skillrouter-report-existing \
+  SKILLROUTER_EXTERNAL_JSON=external/SkillRouter/outputs/local_rtl_benchmark/reranked/easy.json
+```
+
+The underlying command is:
+
+```sh
+python3 -m skill_retriever run-skillrouter-benchmark benchmarks/router_benchmark.json \
+  --skills-root skills \
+  --external-root external/SkillRouter \
+  --work-dir work/skillrouter_benchmark \
+  --mode pipeline \
+  --dry-run
+
+# remove --dry-run to let the adapter launch external retrieval/rerank,
+# or run the printed commands manually and then use --use-existing
+
+python3 -m skill_retriever run-skillrouter-benchmark benchmarks/router_benchmark.json \
+  --skills-root skills \
+  --external-root external/SkillRouter \
+  --work-dir work/skillrouter_benchmark \
+  --mode pipeline \
+  --use-existing \
+  --report-md work/reports/skillrouter_benchmark.md \
+  --report-json work/reports/skillrouter_benchmark.json \
+  --format json
+```
+
+The lower-level manual path is:
+
+```sh
+python3 -m skill_retriever prepare-skillrouter-benchmark benchmarks/router_benchmark.json \
+  --skills-root skills \
+  --output-dir /tmp/local_rtl_skillrouter_benchmark
+
+# then run the printed external src.export_retrieval command from external/SkillRouter
+
+python3 -m skill_retriever compare-skillrouter-benchmark benchmarks/router_benchmark.json \
+  --skills-root skills \
+  --external-json external/SkillRouter/outputs/local_rtl_benchmark/reranked/easy.json \
+  --report-md work/reports/skillrouter_benchmark.md \
+  --format json
+```
+
+This reports local, raw external, semantic-scored, and fused `hit@1`, `mrr@10`, and `recall@5/10/20`.
+Generated report files under `work/reports/` are ignored by git.
+`make skillrouter-status` writes a GOAL.md alignment report that lists implemented router capabilities, boundaries, and next steps.
 
 After external SkillRouter writes `outputs/local_rtl_query/retrieval/easy.json`, fuse that semantic result with the local lexical/spec-aware retriever:
 
@@ -263,7 +390,8 @@ Pipeline:
 - Creates `tests/original/README.md` to explicitly mark upstream/original tests as not imported yet.
 - Writes per-stage tool records under `tool_runs/`: `frontend.json`, `source_compile.json`, `tb_compile.json`, and `simulation.json`.
 - Runs staged verification when `iverilog`/`vvp` are available: source-closure compile, generated testbench compile, then smoke simulation.
-- Writes `report.json` with frontend, candidate, dependency, staged verification, quality-tier, and legacy per-skill fields.
+- Writes `quality.json` with explicit quality gates for metadata schema, dependency closure, source compile, generated testbench compile, smoke simulation, original tests, formal verification, and manual review.
+- Writes `report.json` with frontend, candidate, dependency, staged verification, quality-tier, quality gate counts, and legacy per-skill fields.
 
 Try the included local sample:
 
@@ -288,8 +416,9 @@ The generated templates are intentionally simplified teaching implementations. T
 - Extracted comments may be incomplete or may miss comments that are far from the module declaration.
 - Generated `template.v` files are educational and reproducible, not production-ready replacements for the source RTL.
 - `gold_candidate` means generated smoke checks passed; it is not a claim of functional correctness.
+- Quality gates are status evidence, not proof of full behavior. `original_tests`, `formal_verification`, and `manual_review` are currently recorded as `absent`.
 - `source_refs` are provenance records only; they are not runtime dependencies and the builder does not download external code.
-- `evidence.json` is the first EvidencePack layer. It records deterministic observations such as ports, parameters, instances, clock/reset candidates, comments, FSM hints, and verification stages.
+- `evidence.json` is the first EvidencePack layer. It records deterministic observations such as ports, parameters, instances, clock/reset candidates, memory candidates, always blocks, continuous assignments, assertions, comments, FSM hints, and verification stages.
 - `skill_spec.json` is generated by a dedicated evidence-aware structured LLM call plus deterministic tool claims. Semantic claims must cite known `evidence_ids`; unknown IDs fail the build instead of being silently accepted. Semantic claims should still be treated as inferred unless separately validated.
 
 ## Notes

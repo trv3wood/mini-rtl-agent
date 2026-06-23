@@ -308,6 +308,35 @@ endmodule
     assert inst.source.line_start is not None
 
 
+def test_frontend_extracts_structural_facts_for_evidence_pack(tmp_path: Path) -> None:
+    rtl = write(
+        tmp_path / "facts.sv",
+        """
+module facts(input logic clk, input logic rst, output logic full);
+    logic [7:0] mem [0:3];
+    logic [2:0] count;
+
+    assign full = count == 4;
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            count <= 0;
+        end
+    end
+
+    assert property (count <= 4);
+endmodule
+""",
+    )
+    module = parse_project([rtl])[0]
+    assert [fact.name for fact in module.memory_candidates] == ["mem"]
+    assert module.always_blocks
+    assert module.always_blocks[0].expression == "posedge clk"
+    assert [fact.name for fact in module.continuous_assignments] == ["full"]
+    assert module.assertions[0].kind == "assert_statement"
+    assert module.assertions[0].expression == "count <= 4"
+
+
 def test_hierarchy_keeps_self_recursive_module_as_root(tmp_path: Path) -> None:
     rtl = write(
         tmp_path / "self_ref.v",
@@ -410,6 +439,10 @@ endmodule
     assert skill["verification"]["source_compile"] == "passed"
     assert skill["verification"]["generated_tb_compile"] == "failed"
     assert skill["verification"]["failure_stage"] == "generated_tb_compile"
+    gates = {gate["name"]: gate for gate in skill["quality_gates"]}
+    assert gates["source_compile"]["status"] == "passed"
+    assert gates["generated_tb_compile"]["status"] == "failed"
+    assert gates["generated_tb_compile"]["evidence_path"] == "tool_runs/tb_compile.json"
 
 
 def test_builder_reports_dependency_closure_incomplete(tmp_path: Path) -> None:
@@ -419,6 +452,10 @@ def test_builder_reports_dependency_closure_incomplete(tmp_path: Path) -> None:
     skill = report["skills"][0]
     assert skill["unresolved_dependencies"] == ["child"]
     assert skill["verification"]["failure_category"] == "dependency_closure_incomplete"
+    gates = {gate["name"]: gate for gate in skill["quality_gates"]}
+    assert gates["dependency_closure"]["status"] == "failed"
+    assert gates["dependency_closure"]["blocking_for_quality"] is True
+    assert report["quality_gate_counts"]["dependency_closure"]["failed"] == 1
 
 
 def test_skill_spec_rejects_unknown_evidence_ids() -> None:
@@ -497,6 +534,12 @@ def test_sample_repo_golden_output(tmp_path: Path) -> None:
     assert report["dependency_graph"]["mermaid_closure"].endswith("dependency_closure_graph.mmd")
     assert (output / "report.json").exists()
     assert all(skill["sim_ok"] for skill in report["skills"])
+    assert report["quality_gate_counts"]["metadata_schema"]["passed"] == 4
+    assert report["quality_gate_counts"]["dependency_closure"]["passed"] == 4
+    assert report["quality_gate_counts"]["source_compile"]["passed"] == 4
+    assert report["quality_gate_counts"]["generated_tb_compile"]["passed"] == 4
+    assert report["quality_gate_counts"]["smoke_simulation"]["passed"] == 4
+    assert report["quality_gate_counts"]["original_tests"]["absent"] == 4
 
     for skill in report["skills"]:
         skill_dir = output / skill["skill_name"]
@@ -553,6 +596,12 @@ def test_sample_repo_golden_output(tmp_path: Path) -> None:
         assert quality["verification"]["original_tests"]["status"] == "absent"
         assert quality["verification"]["formal_verification"]["status"] == "absent"
         assert quality["verification"]["manual_review"]["status"] == "absent"
+        quality_gates = {gate["name"]: gate for gate in quality["quality_gates"]["gates"]}
+        assert quality_gates["metadata_schema"]["status"] == "passed"
+        assert quality_gates["dependency_closure"]["status"] == "passed"
+        assert quality_gates["source_compile"]["evidence_path"] == "tool_runs/source_compile.json"
+        assert quality_gates["original_tests"]["status"] == "absent"
+        assert quality["quality_gates"]["summary"]["passed"] >= 5
 
         evidence = json.loads((skill_dir / "evidence.json").read_text(encoding="utf-8"))
         assert evidence["module"] == module_name
@@ -560,6 +609,13 @@ def test_sample_repo_golden_output(tmp_path: Path) -> None:
         assert evidence["evidence"]
         assert all(item["id"].startswith("E_") for item in evidence["evidence"])
         assert {port["type"] for port in evidence["ports"]} == {"port"}
+        if module_name == "simple_fifo":
+            assert [item["name"] for item in evidence["memory_candidates"]] == ["mem"]
+            assert evidence["always_blocks"]
+            assert {item["name"] for item in evidence["continuous_assignments"]} == {"full", "empty"}
+            assert any(item["id"].startswith("E_MEM") for item in evidence["evidence"])
+            assert any(item["id"].startswith("E_ALWAYS") for item in evidence["evidence"])
+            assert any(item["id"].startswith("E_ASSIGN") for item in evidence["evidence"])
         assert {stage["stage"] for stage in evidence["verification_stages"]} == {
             "source_compile",
             "generated_tb_compile",

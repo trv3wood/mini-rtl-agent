@@ -8,6 +8,7 @@ from typing import Any
 from .models import RankedSkill
 from .retriever import load_candidate, score_candidate
 from .models import QueryPlan
+from .router_response import build_router_response
 
 
 def load_skillrouter_ids(retrieval_json: Path, task_id: str) -> list[str]:
@@ -99,6 +100,7 @@ def fused_payload(plan: QueryPlan, lexical: list[RankedSkill], semantic: list[Ra
         "lexical_results": [item.to_dict() for item in lexical],
         "semantic_results": [item.to_dict() for item in semantic],
         "results": [item.to_dict() for item in fused],
+        "router_response": build_router_response(plan, fused, limit=len(fused)),
     }
 
 

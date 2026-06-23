@@ -3,7 +3,17 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .models import InstanceInfo, ModuleIR, ModuleInfo, Parameter, ParameterInfo, Port, PortInfo, SourceLocation
+from .models import (
+    InstanceInfo,
+    ModuleIR,
+    ModuleInfo,
+    Parameter,
+    ParameterInfo,
+    Port,
+    PortInfo,
+    SourceLocation,
+    StructuralFact,
+)
 
 
 MODULE_RE = re.compile(
@@ -16,6 +26,19 @@ DECL_RE = re.compile(
     re.S,
 )
 STATE_NAME_RE = re.compile(r"\b(?:localparam|parameter)\b[^;=]*?\b([A-Z][A-Z0-9_]{2,})\b\s*=", re.S)
+MEMORY_DECL_RE = re.compile(
+    r"\b(?P<kind>reg|logic)\b\s*"
+    r"(?P<packed>(?:\[[^\]]+\]\s*)*)"
+    r"(?P<name>[a-zA-Z_][a-zA-Z0-9_$]*)\s*"
+    r"(?P<unpacked>(?:\[[^\]]+\]\s*)+)\s*;",
+    re.S,
+)
+ALWAYS_RE = re.compile(r"\balways(?:_[a-zA-Z0-9_]+)?\b\s*(?:@\s*\((?P<sensitivity>.*?)\))?", re.S)
+ASSIGN_RE = re.compile(r"\bassign\s+(?P<lhs>[^=;]+?)\s*=\s*(?P<rhs>.*?);", re.S)
+ASSERTION_RE = re.compile(
+    r"\b(?P<kind>assert|assume|cover)\b\s*(?:property\s*)?\((?P<expr>.*?)\)\s*;",
+    re.S,
+)
 INSTANCE_RE = re.compile(
     r"\b(?P<module>[a-zA-Z_][a-zA-Z0-9_$]*)\s*"
     r"(?:#\s*\((?P<params>.*?)\)\s*)?"
@@ -255,6 +278,92 @@ def detect_states(text: str) -> list[str]:
     return states[:16]
 
 
+def compact_expression(text: str, limit: int = 160) -> str:
+    compacted = " ".join(text.split())
+    if len(compacted) <= limit:
+        return compacted
+    return compacted[: limit - 3].rstrip() + "..."
+
+
+def detect_memory_candidates(body: str, full_text: str, path: Path, body_offset: int) -> list[StructuralFact]:
+    facts: list[StructuralFact] = []
+    for match in MEMORY_DECL_RE.finditer(body):
+        facts.append(
+            StructuralFact(
+                kind="memory_declaration",
+                name=match.group("name"),
+                expression=compact_expression(match.group(0)),
+                source=source_location_for_offset(
+                    full_text,
+                    path,
+                    body_offset + match.start(),
+                    body_offset + match.end(),
+                ),
+            )
+        )
+    return facts
+
+
+def detect_always_blocks(body: str, full_text: str, path: Path, body_offset: int) -> list[StructuralFact]:
+    facts: list[StructuralFact] = []
+    for idx, match in enumerate(ALWAYS_RE.finditer(body), start=1):
+        sensitivity = compact_expression(match.group("sensitivity") or "")
+        facts.append(
+            StructuralFact(
+                kind="always_block",
+                name=f"always_{idx}",
+                expression=sensitivity or "implicit",
+                source=source_location_for_offset(
+                    full_text,
+                    path,
+                    body_offset + match.start(),
+                    body_offset + match.end(),
+                ),
+            )
+        )
+    return facts
+
+
+def detect_continuous_assignments(body: str, full_text: str, path: Path, body_offset: int) -> list[StructuralFact]:
+    facts: list[StructuralFact] = []
+    for match in ASSIGN_RE.finditer(body):
+        lhs = compact_expression(match.group("lhs"))
+        rhs = compact_expression(match.group("rhs"))
+        facts.append(
+            StructuralFact(
+                kind="continuous_assignment",
+                name=lhs,
+                expression=f"{lhs} = {rhs}",
+                source=source_location_for_offset(
+                    full_text,
+                    path,
+                    body_offset + match.start(),
+                    body_offset + match.end(),
+                ),
+            )
+        )
+    return facts
+
+
+def detect_assertions(body: str, full_text: str, path: Path, body_offset: int) -> list[StructuralFact]:
+    facts: list[StructuralFact] = []
+    for idx, match in enumerate(ASSERTION_RE.finditer(body), start=1):
+        facts.append(
+            StructuralFact(
+                kind=f"{match.group('kind')}_statement",
+                name=f"{match.group('kind')}_{idx}",
+                expression=compact_expression(match.group("expr")),
+                source=source_location_for_offset(
+                    full_text,
+                    path,
+                    body_offset + match.start(),
+                    body_offset + match.end(),
+                ),
+            )
+        )
+    return facts
+
+
 def parse_modules(path: Path) -> list[ModuleInfo]:
     return [module.to_module_info() for module in parse_modules_with_regex(path)]
 
@@ -267,6 +376,7 @@ def parse_modules_with_regex(path: Path) -> list[ModuleIR]:
         next_module = MODULE_RE.search(text, match.end())
         end = next_module.start() if next_module else len(text)
         body = text[match.end() : end]
+        body_offset = match.end()
         ports = parse_ansi_ports(match.group("ports"))
         ports = parse_body_ports(body, ports)
         source = source_location_for_offset(text, path, match.start(), end)
@@ -277,9 +387,13 @@ def parse_modules_with_regex(path: Path) -> list[ModuleIR]:
                 source_file=str(path),
                 parameters=parse_parameter_infos(match.group("params"), source),
                 ports=port_infos,
-                instances=parse_instances(body, text, path, match.end(), name),
+                instances=parse_instances(body, text, path, body_offset, name),
                 clock_candidates=detect_clock_candidates(port_infos),
                 reset_candidates=detect_reset_candidates(port_infos),
+                memory_candidates=detect_memory_candidates(body, text, path, body_offset),
+                always_blocks=detect_always_blocks(body, text, path, body_offset),
+                continuous_assignments=detect_continuous_assignments(body, text, path, body_offset),
+                assertions=detect_assertions(body, text, path, body_offset),
                 parse_backend="regex",
                 syntax_backend="regex",
                 instance_backend="regex",

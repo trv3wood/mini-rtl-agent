@@ -136,6 +136,117 @@ def quality_tier(candidate: SkillCandidate, schema_ok: bool, verification: Verif
     return "silver"
 
 
+def status_gate(
+    name: str,
+    status: str,
+    *,
+    evidence_path: str,
+    blocking_for_quality: bool,
+    reason: str = "",
+) -> dict:
+    passed = status == "passed"
+    return {
+        "name": name,
+        "status": status,
+        "passed": passed,
+        "blocking_for_quality": blocking_for_quality,
+        "evidence_path": evidence_path,
+        "reason": reason,
+    }
+
+
+def compact_gate_reason(text: str, limit: int = 240) -> str:
+    compacted = " ".join(text.split())
+    if len(compacted) <= limit:
+        return compacted
+    return compacted[: limit - 3].rstrip() + "..."
+
+
+def quality_gates_json(candidate: SkillCandidate, schema_ok: bool, verification: VerificationResult) -> dict:
+    duplicate_definition = any(
+        "duplicate module definition" in warning for warning in candidate.hierarchy_warnings
+    )
+    gates = [
+        status_gate(
+            "metadata_schema",
+            "passed" if schema_ok else "failed",
+            evidence_path="module_info.json",
+            blocking_for_quality=True,
+            reason="" if schema_ok else "module_info.json failed schema validation",
+        ),
+        status_gate(
+            "dependency_closure",
+            "passed" if candidate.is_self_contained else "failed",
+            evidence_path="closure.json",
+            blocking_for_quality=True,
+            reason=(
+                "closure is self-contained"
+                if candidate.is_self_contained
+                else "unresolved dependencies, duplicate definitions, or missing root source"
+            ),
+        ),
+        status_gate(
+            "duplicate_definition",
+            "failed" if duplicate_definition else "passed",
+            evidence_path="closure.json",
+            blocking_for_quality=True,
+            reason="duplicate module definition detected" if duplicate_definition else "",
+        ),
+        status_gate(
+            "source_compile",
+            verification.source_compile.status,
+            evidence_path="tool_runs/source_compile.json",
+            blocking_for_quality=True,
+            reason=compact_gate_reason(verification.source_compile.stderr or verification.source_compile.stdout),
+        ),
+        status_gate(
+            "generated_tb_compile",
+            verification.generated_tb_compile.status,
+            evidence_path="tool_runs/tb_compile.json",
+            blocking_for_quality=False,
+            reason=compact_gate_reason(
+                verification.generated_tb_compile.stderr or verification.generated_tb_compile.stdout
+            ),
+        ),
+        status_gate(
+            "smoke_simulation",
+            verification.simulation.status,
+            evidence_path="tool_runs/simulation.json",
+            blocking_for_quality=False,
+            reason=compact_gate_reason(verification.simulation.stderr or verification.simulation.stdout),
+        ),
+        status_gate(
+            "original_tests",
+            "absent",
+            evidence_path="tests/original/README.md",
+            blocking_for_quality=False,
+            reason="original repository tests are not imported yet",
+        ),
+        status_gate(
+            "formal_verification",
+            "absent",
+            evidence_path="quality.json",
+            blocking_for_quality=False,
+            reason="formal checks are not implemented yet",
+        ),
+        status_gate(
+            "manual_review",
+            "absent",
+            evidence_path="quality.json",
+            blocking_for_quality=False,
+            reason="manual review is not recorded by the builder",
+        ),
+    ]
+    summary: dict[str, int] = {}
+    for gate in gates:
+        summary[gate["status"]] = summary.get(gate["status"], 0) + 1
+    return {
+        "schema_version": "0.1",
+        "gates": gates,
+        "summary": summary,
+    }
+
+
 def manifest_json(candidate: SkillCandidate, repo_path: Path) -> dict:
     return {
         "skill_id": candidate.skill_id,
@@ -211,6 +322,7 @@ def quality_json(
     verification: VerificationResult,
     tier: str,
 ) -> dict:
+    quality_gates = quality_gates_json(candidate, schema_ok, verification)
     return {
         "frontend": {
             "backends": candidate.frontend_backends,
@@ -234,6 +346,7 @@ def quality_json(
         },
         "schema_ok": schema_ok,
         "quality_tier": tier,
+        "quality_gates": quality_gates,
     }
 
 
@@ -370,6 +483,59 @@ def evidence_pack_json(
         add("E_FSM", "fsm_candidate", {"value": state, "backend": module_ir.parse_backend})
         for state in module_ir.states
     ]
+    memory_candidates = [
+        add(
+            "E_MEM",
+            "memory_candidate",
+            {
+                "name": fact.name,
+                "expression": fact.expression,
+                "source": source_location_json(fact.source, repo_path),
+                "backend": fact.backend,
+            },
+        )
+        for fact in module_ir.memory_candidates
+    ]
+    always_blocks = [
+        add(
+            "E_ALWAYS",
+            "always_block",
+            {
+                "name": fact.name,
+                "sensitivity": fact.expression,
+                "source": source_location_json(fact.source, repo_path),
+                "backend": fact.backend,
+            },
+        )
+        for fact in module_ir.always_blocks
+    ]
+    continuous_assignments = [
+        add(
+            "E_ASSIGN",
+            "continuous_assignment",
+            {
+                "name": fact.name,
+                "expression": fact.expression,
+                "source": source_location_json(fact.source, repo_path),
+                "backend": fact.backend,
+            },
+        )
+        for fact in module_ir.continuous_assignments
+    ]
+    assertions = [
+        add(
+            "E_ASSERT",
+            "assertion",
+            {
+                "name": fact.name,
+                "kind": fact.kind,
+                "expression": fact.expression,
+                "source": source_location_json(fact.source, repo_path),
+                "backend": fact.backend,
+            },
+        )
+        for fact in module_ir.assertions
+    ]
     comments = [
         add("E_COMMENT", "comment", {"value": comment, "backend": module_ir.parse_backend})
         for comment in module_ir.comments
@@ -421,10 +587,10 @@ def evidence_pack_json(
         "clock_candidates": clock_candidates,
         "reset_candidates": reset_candidates,
         "fsm_candidates": fsm_candidates,
-        "memory_candidates": [],
-        "always_blocks": [],
-        "continuous_assignments": [],
-        "assertions": [],
+        "memory_candidates": memory_candidates,
+        "always_blocks": always_blocks,
+        "continuous_assignments": continuous_assignments,
+        "assertions": assertions,
         "comments": comments,
         "verification_stages": verification_evidence,
         "source_compile": verification.source_compile.status,
@@ -496,6 +662,7 @@ def write_skill(
     verification_candidate = replace(candidate, source_files=packaged_source_files)
     verification = verify_candidate(verification_candidate, skill_dir, tb_path)
     tier = quality_tier(candidate, not schema_errors, verification)
+    quality_gates = quality_gates_json(candidate, not schema_errors, verification)
     evidence_pack = evidence_pack_json(module_ir, candidate, repo_path, verification)
     atomic_write_json(skill_dir / "manifest.json", manifest_json(candidate, repo_path))
     atomic_write_json(
@@ -563,6 +730,8 @@ def write_skill(
         "vendor_primitives": candidate.vendor_primitives,
         "verification": verification_stage_summary(verification),
         "quality_tier": tier,
+        "quality_gate_summary": quality_gates["summary"],
+        "quality_gates": quality_gates["gates"],
         "score": {
             "total": score.total,
             "metadata_completeness": score.metadata_completeness,
@@ -685,6 +854,11 @@ def build_skill_library(
     quality_tiers = {tier: 0 for tier in ("rejected", "bronze", "silver", "gold_candidate")}
     for skill in skills:
         quality_tiers[skill["quality_tier"]] = quality_tiers.get(skill["quality_tier"], 0) + 1
+    quality_gate_counts: dict[str, dict[str, int]] = {}
+    for skill in skills:
+        for gate in skill.get("quality_gates", []):
+            gate_counts = quality_gate_counts.setdefault(gate["name"], {})
+            gate_counts[gate["status"]] = gate_counts.get(gate["status"], 0) + 1
     dependency_issues = [issue for issues in hierarchy.dependency_issues.values() for issue in issues]
     report = {
         "input_repo": str(repo_path),
@@ -724,6 +898,7 @@ def build_skill_library(
         },
         "verification": verification_counts,
         "quality_tiers": quality_tiers,
+        "quality_gate_counts": quality_gate_counts,
         "skills": skills,
     }
     (output_root / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
