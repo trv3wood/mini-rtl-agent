@@ -1,0 +1,83 @@
+{
+  "name": "axis_fifo",
+  "skill_type": "module",
+  "category": "streaming",
+  "description": "AXI-stream ready/valid FIFO for elastic packet or sample buffering with tdata ordering.",
+  "source_refs": [
+    {
+      "project": "alexforencich/verilog-axis",
+      "repository": "https://github.com/alexforencich/verilog-axis",
+      "commit": "48ff7a7e2ef782cf778d47910cf85835c64b1bce",
+      "path": "rtl/axis_fifo.v",
+      "module": "axis_fifo",
+      "url": "https://github.com/alexforencich/verilog-axis/blob/48ff7a7e2ef782cf778d47910cf85835c64b1bce/rtl/axis_fifo.v",
+      "license": "MIT",
+      "notes": "Full AXI-stream FIFO with frame-aware options; this skill keeps a compact data-only teaching subset."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "DATA_WIDTH",
+      "default": 8,
+      "description": "Stream payload width."
+    },
+    {
+      "name": "DEPTH",
+      "default": 4,
+      "description": "FIFO entries; use larger depths for burst absorption."
+    },
+    {
+      "name": "ADDR_WIDTH",
+      "default": 2,
+      "description": "Address bits for DEPTH entries."
+    }
+  ],
+  "ports": [
+    {"name": "clk", "direction": "input", "width": 1, "description": "Single stream clock."},
+    {"name": "rst", "direction": "input", "width": 1, "description": "Synchronous reset."},
+    {"name": "s_axis_tdata", "direction": "input", "width": "DATA_WIDTH", "description": "Input stream payload."},
+    {"name": "s_axis_tvalid", "direction": "input", "width": 1, "description": "Input stream valid."},
+    {"name": "s_axis_tready", "direction": "output", "width": 1, "description": "Input stream ready."},
+    {"name": "m_axis_tdata", "direction": "output", "width": "DATA_WIDTH", "description": "Output stream payload."},
+    {"name": "m_axis_tvalid", "direction": "output", "width": 1, "description": "Output stream valid."},
+    {"name": "m_axis_tready", "direction": "input", "width": 1, "description": "Output stream ready."},
+    {"name": "count", "direction": "output", "width": "ADDR_WIDTH+1", "description": "Current FIFO occupancy."}
+  ],
+  "states": [
+    {"name": "EMPTY", "description": "No valid stream words are stored."},
+    {"name": "PARTIAL", "description": "Some stream words are stored and order must be preserved."},
+    {"name": "FULL", "description": "All entries are occupied; deassert input ready unless an output word is accepted."}
+  ],
+  "constraints": [
+    "Use for same-clock AXI-stream-like buffering, not clock-domain crossing.",
+    "Preserve input order and never drop accepted tdata words.",
+    "Hold m_axis_tdata stable while m_axis_tvalid is high and m_axis_tready is low.",
+    "Use axis_srl_fifo for very small LUT/SRL buffering and axis_pipeline_fifo for timing pipeline stages."
+  ],
+  "dependencies": [],
+  "interfaces": ["axis", "ready_valid", "fifo"],
+  "patterns": [
+    "Map ready/valid handshakes onto FIFO write and read enables.",
+    "Compute s_axis_tready from FIFO vacancy or simultaneous output acceptance.",
+    "Compute m_axis_tvalid from non-empty occupancy.",
+    "Use circular pointers and a count register for deterministic full/empty behavior."
+  ],
+  "implementation_notes": [
+    "Keep the teaching template data-only; add tkeep, tlast, tid, or tuser only when requested.",
+    "Handle simultaneous input and output handshakes without changing occupancy.",
+    "Favor this skill when the query asks for elastic stream storage, burst absorption, or occupancy count.",
+    "Do not select this skill merely for a one-word skid buffer."
+  ],
+  "test_strategy": [
+    "Push multiple words while downstream is stalled.",
+    "Drain and compare output order.",
+    "Exercise simultaneous input and output transfers."
+  ],
+  "verification_goals": [
+    "Every accepted input tdata appears once at the output in order.",
+    "s_axis_tready deasserts when occupancy reaches DEPTH without output acceptance.",
+    "m_axis_tdata remains stable under downstream backpressure.",
+    "count tracks occupancy across fill, drain, and simultaneous transfer."
+  ],
+  "keywords": ["axis fifo", "axi stream fifo", "ready valid fifo", "elastic buffer", "burst buffer", "tdata", "tvalid", "tready", "occupancy", "count"]
+}

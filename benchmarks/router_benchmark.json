@@ -1,0 +1,148 @@
+{
+  "cases": [
+    {
+      "id": "uart_transmitter_ready_valid",
+      "query_plan": {
+        "intent": "design a UART transmitter with ready valid input and busy output",
+        "positive_terms": ["uart", "transmitter", "ready", "valid", "busy"],
+        "negative_terms": ["receiver"],
+        "likely_categories": ["serial"],
+        "likely_interfaces": ["uart", "ready_valid"],
+        "required_features": ["busy", "ready valid"]
+      },
+      "relevant_skill_ids": ["uart_tx"]
+    },
+    {
+      "id": "sync_fifo_not_async",
+      "query_plan": {
+        "intent": "single clock FIFO with full empty flags",
+        "positive_terms": ["fifo", "single clock", "full", "empty"],
+        "negative_terms": ["async", "dual clock"],
+        "likely_categories": ["buffering"],
+        "likely_interfaces": ["fifo"],
+        "required_features": ["full", "empty"]
+      },
+      "relevant_skill_ids": ["sync_fifo"]
+    },
+    {
+      "id": "async_fifo_cdc",
+      "query_plan": {
+        "intent": "dual clock async FIFO for clock domain crossing",
+        "positive_terms": ["async", "fifo", "cdc", "gray", "dual clock"],
+        "negative_terms": [],
+        "likely_categories": ["cdc"],
+        "likely_interfaces": ["fifo", "cdc"],
+        "required_features": ["gray", "synchronizer"]
+      },
+      "relevant_skill_ids": ["async_fifo"]
+    },
+    {
+      "id": "fair_round_robin_arbiter",
+      "query_plan": {
+        "intent": "fair round robin arbiter with request grant acknowledge",
+        "positive_terms": ["fair", "round robin", "arbiter", "grant", "request", "acknowledge"],
+        "negative_terms": [],
+        "likely_categories": ["control"],
+        "likely_interfaces": ["arbiter"],
+        "required_features": ["round_robin", "acknowledge"]
+      },
+      "relevant_skill_ids": ["round_robin_arbiter"]
+    },
+    {
+      "id": "ready_valid_skid_buffer",
+      "query_plan": {
+        "intent": "ready valid skid buffer for backpressure",
+        "positive_terms": ["ready", "valid", "skid", "buffer", "backpressure"],
+        "negative_terms": [],
+        "likely_categories": ["streaming"],
+        "likely_interfaces": ["ready_valid", "axis"],
+        "required_features": ["backpressure", "hold data"]
+      },
+      "relevant_skill_ids": ["axis_handshake_buffer"]
+    },
+    {
+      "id": "standalone_fifo_parameter_customization",
+      "query_plan": {
+        "intent": "single clock FIFO configurable data width and depth",
+        "positive_terms": ["fifo", "data width", "depth", "parameter", "full", "empty"],
+        "negative_terms": ["async", "dual clock", "cdc"],
+        "likely_categories": ["buffering"],
+        "likely_interfaces": ["fifo"],
+        "required_features": ["DATA_WIDTH", "DEPTH"]
+      },
+      "relevant_skill_ids": ["sync_fifo"]
+    },
+    {
+      "id": "composite_async_fifo_dependency_closure",
+      "query_plan": {
+        "intent": "asynchronous FIFO with reset synchronizer dependency for CDC",
+        "positive_terms": ["async", "fifo", "cdc", "reset synchronizer", "dependency", "gray"],
+        "negative_terms": ["single clock"],
+        "likely_categories": ["cdc"],
+        "likely_interfaces": ["fifo", "cdc"],
+        "required_features": ["reset_synchronizer", "gray"]
+      },
+      "relevant_skill_ids": ["async_fifo"]
+    },
+    {
+      "id": "uart_receiver_not_transmitter",
+      "query_plan": {
+        "intent": "UART receiver sampler with output valid and framing error",
+        "positive_terms": ["uart", "receiver", "sample", "framing", "valid"],
+        "negative_terms": ["transmitter", "tx"],
+        "likely_categories": ["serial"],
+        "likely_interfaces": ["uart", "ready_valid"],
+        "required_features": ["frame_error", "overrun_error"]
+      },
+      "relevant_skill_ids": ["uart_rx"]
+    },
+    {
+      "id": "spi_master_not_i2c",
+      "query_plan": {
+        "intent": "SPI master with SCLK MOSI MISO chip select",
+        "positive_terms": ["spi", "master", "sclk", "mosi", "miso", "chip select"],
+        "negative_terms": ["i2c", "scl", "sda"],
+        "likely_categories": ["serial"],
+        "likely_interfaces": ["spi"],
+        "required_features": ["sclk", "mosi", "miso"]
+      },
+      "relevant_skill_ids": ["spi_master"]
+    },
+    {
+      "id": "axis_fifo_burst_buffer",
+      "query_plan": {
+        "intent": "AXI stream FIFO for burst buffering with tvalid tready and occupancy count",
+        "positive_terms": ["axis fifo", "axi stream fifo", "burst", "buffer", "tvalid", "tready", "occupancy", "count"],
+        "negative_terms": ["srl", "shift register", "pipeline", "register slice"],
+        "likely_categories": ["streaming"],
+        "likely_interfaces": ["axis", "ready_valid", "fifo"],
+        "required_features": ["burst buffer", "occupancy count", "preserve order"]
+      },
+      "relevant_skill_ids": ["axis_fifo"]
+    },
+    {
+      "id": "axis_srl_fifo_shallow_lut",
+      "query_plan": {
+        "intent": "small shallow AXI stream SRL FIFO implemented with shift register LUT resources",
+        "positive_terms": ["axis srl fifo", "srl", "shift register", "shallow", "small depth", "lut", "tvalid", "tready"],
+        "negative_terms": ["burst", "large", "pipeline", "timing closure"],
+        "likely_categories": ["streaming"],
+        "likely_interfaces": ["axis", "ready_valid", "fifo", "srl"],
+        "required_features": ["small depth", "shift register", "lut"]
+      },
+      "relevant_skill_ids": ["axis_srl_fifo"]
+    },
+    {
+      "id": "axis_pipeline_fifo_timing_register_slice",
+      "query_plan": {
+        "intent": "AXI stream pipeline FIFO register slice for timing closure and added latency",
+        "positive_terms": ["axis pipeline fifo", "pipeline", "register slice", "timing closure", "latency", "tvalid", "tready"],
+        "negative_terms": ["srl", "large queue", "burst"],
+        "likely_categories": ["streaming"],
+        "likely_interfaces": ["axis", "ready_valid", "pipeline", "register_slice"],
+        "required_features": ["timing closure", "pipeline stage", "backpressure"]
+      },
+      "relevant_skill_ids": ["axis_pipeline_fifo"]
+    }
+  ]
+}

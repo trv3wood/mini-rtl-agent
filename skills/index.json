@@ -33,6 +33,39 @@
   {
     "category": "streaming",
     "dependencies": [],
+    "description": "AXI-stream ready/valid FIFO for elastic packet or sample buffering with tdata ordering.",
+    "has_constraints": true,
+    "has_implementation_notes": true,
+    "has_verification_goals": true,
+    "interfaces": [
+      "axis",
+      "ready_valid",
+      "fifo"
+    ],
+    "keywords": [
+      "axis fifo",
+      "axi stream fifo",
+      "ready valid fifo",
+      "elastic buffer",
+      "burst buffer",
+      "tdata",
+      "tvalid",
+      "tready",
+      "occupancy",
+      "count"
+    ],
+    "name": "axis_fifo",
+    "path": "skills/axis_fifo/module_info.json",
+    "readme_path": "skills/axis_fifo/README.md",
+    "skill_type": "module",
+    "source_ref_count": 1,
+    "template_path": "skills/axis_fifo/template.v",
+    "testbench_path": "skills/axis_fifo/examples/tb_axis_fifo.v",
+    "unresolved_dependencies": []
+  },
+  {
+    "category": "streaming",
+    "dependencies": [],
     "description": "Ready/valid one-word skid or pipeline buffer for AXI-stream-like data paths.",
     "has_constraints": true,
     "has_implementation_notes": true,
@@ -57,6 +90,73 @@
     "source_ref_count": 2,
     "template_path": "skills/axis_handshake_buffer/template.v",
     "testbench_path": "skills/axis_handshake_buffer/examples/tb_axis_handshake_buffer.v",
+    "unresolved_dependencies": []
+  },
+  {
+    "category": "streaming",
+    "dependencies": [],
+    "description": "AXI-stream pipeline FIFO/register slice for timing closure with a small number of ready/valid stages.",
+    "has_constraints": true,
+    "has_implementation_notes": true,
+    "has_verification_goals": true,
+    "interfaces": [
+      "axis",
+      "ready_valid",
+      "pipeline",
+      "register_slice"
+    ],
+    "keywords": [
+      "axis pipeline fifo",
+      "pipeline fifo",
+      "register slice",
+      "timing closure",
+      "ready valid pipeline",
+      "latency",
+      "pipeline stage",
+      "tvalid",
+      "tready"
+    ],
+    "name": "axis_pipeline_fifo",
+    "path": "skills/axis_pipeline_fifo/module_info.json",
+    "readme_path": "skills/axis_pipeline_fifo/README.md",
+    "skill_type": "module",
+    "source_ref_count": 1,
+    "template_path": "skills/axis_pipeline_fifo/template.v",
+    "testbench_path": "skills/axis_pipeline_fifo/examples/tb_axis_pipeline_fifo.v",
+    "unresolved_dependencies": []
+  },
+  {
+    "category": "streaming",
+    "dependencies": [],
+    "description": "Small AXI-stream FIFO intended for LUT/SRL-style short-depth buffering with ready/valid handshakes.",
+    "has_constraints": true,
+    "has_implementation_notes": true,
+    "has_verification_goals": true,
+    "interfaces": [
+      "axis",
+      "ready_valid",
+      "fifo",
+      "srl"
+    ],
+    "keywords": [
+      "axis srl fifo",
+      "srl fifo",
+      "shift register fifo",
+      "shallow fifo",
+      "small depth",
+      "lut",
+      "lutram",
+      "ready valid",
+      "tvalid",
+      "tready"
+    ],
+    "name": "axis_srl_fifo",
+    "path": "skills/axis_srl_fifo/module_info.json",
+    "readme_path": "skills/axis_srl_fifo/README.md",
+    "skill_type": "module",
+    "source_ref_count": 1,
+    "template_path": "skills/axis_srl_fifo/template.v",
+    "testbench_path": "skills/axis_srl_fifo/examples/tb_axis_srl_fifo.v",
     "unresolved_dependencies": []
   },
   {

@@ -1,0 +1,69 @@
+{
+  "name": "axis_pipeline_fifo",
+  "skill_type": "module",
+  "category": "streaming",
+  "description": "AXI-stream pipeline FIFO/register slice for timing closure with a small number of ready/valid stages.",
+  "source_refs": [
+    {
+      "project": "alexforencich/verilog-axis",
+      "repository": "https://github.com/alexforencich/verilog-axis",
+      "commit": "48ff7a7e2ef782cf778d47910cf85835c64b1bce",
+      "path": "rtl/axis_pipeline_fifo.v",
+      "module": "axis_pipeline_fifo",
+      "url": "https://github.com/alexforencich/verilog-axis/blob/48ff7a7e2ef782cf778d47910cf85835c64b1bce/rtl/axis_pipeline_fifo.v",
+      "license": "MIT",
+      "notes": "AXI-stream pipeline FIFO for timing closure; this skill keeps a compact two-stage teaching subset."
+    }
+  ],
+  "parameters": [
+    {"name": "DATA_WIDTH", "default": 8, "description": "Stream payload width."},
+    {"name": "PIPELINE", "default": 2, "description": "Number of register stages in the timing pipeline."}
+  ],
+  "ports": [
+    {"name": "clk", "direction": "input", "width": 1, "description": "Single stream clock."},
+    {"name": "rst", "direction": "input", "width": 1, "description": "Synchronous reset."},
+    {"name": "s_axis_tdata", "direction": "input", "width": "DATA_WIDTH", "description": "Input stream payload."},
+    {"name": "s_axis_tvalid", "direction": "input", "width": 1, "description": "Input stream valid."},
+    {"name": "s_axis_tready", "direction": "output", "width": 1, "description": "Input stream ready."},
+    {"name": "m_axis_tdata", "direction": "output", "width": "DATA_WIDTH", "description": "Output stream payload."},
+    {"name": "m_axis_tvalid", "direction": "output", "width": 1, "description": "Output stream valid."},
+    {"name": "m_axis_tready", "direction": "input", "width": 1, "description": "Output stream ready."}
+  ],
+  "states": [
+    {"name": "EMPTY_PIPE", "description": "No valid words are resident in the pipeline stages."},
+    {"name": "FLOWING", "description": "Words advance through the registered ready/valid stages."},
+    {"name": "STALLED", "description": "Downstream backpressure holds valid stages stable."}
+  ],
+  "constraints": [
+    "Use for timing closure or register slicing on AXI-stream paths.",
+    "Do not use for large burst buffering; choose axis_fifo.",
+    "Do not use for SRL-specific small storage; choose axis_srl_fifo.",
+    "Each valid stage must hold its data while the next stage cannot accept it."
+  ],
+  "dependencies": [],
+  "interfaces": ["axis", "ready_valid", "pipeline", "register_slice"],
+  "patterns": [
+    "Build a chain of ready/valid storage stages.",
+    "A stage can accept when it is empty or the next stage accepts.",
+    "Backpressure ripples upstream through stage-ready signals.",
+    "Data advances one stage per clock when downstream is ready."
+  ],
+  "implementation_notes": [
+    "Favor this skill when the query mentions timing closure, pipeline FIFO, register slice, or added latency.",
+    "Keep the pipeline shallow and deterministic; use axis_fifo for queue depth.",
+    "The teaching template fixes two stages because parameterized generate logic is not the point of the skill.",
+    "Duplicate sideband registers for tlast, tkeep, or tuser when those fields are requested."
+  ],
+  "test_strategy": [
+    "Send two words through a stalled output and verify order.",
+    "Exercise backpressure to verify input ready deassertion.",
+    "Drain after stall and confirm all stage data is preserved."
+  ],
+  "verification_goals": [
+    "Pipeline stages preserve accepted stream order.",
+    "Downstream stalls hold output data stable.",
+    "Backpressure reaches the input when all stages are occupied.",
+    "No word is duplicated or skipped when the pipeline resumes."
+  ],
+  "keywords": ["axis pipeline fifo", "pipeline fifo", "register slice", "timing closure", "ready valid pipeline", "latency", "pipeline stage", "tvalid", "tready"]
+}

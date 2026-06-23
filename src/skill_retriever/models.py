@@ -61,6 +61,9 @@ class Candidate:
     module_info_path: Path
     module_info: dict[str, Any]
     readme_text: str = ""
+    skill_spec: dict[str, Any] = field(default_factory=dict)
+    skill_spec_text: str = ""
+    adaptation: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -73,6 +76,8 @@ class RankedSkill:
     patterns: list[str]
     why_matched: list[str] = field(default_factory=list)
     penalties: list[str] = field(default_factory=list)
+    risks: list[str] = field(default_factory=list)
+    adaptation_hints: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -84,5 +89,6 @@ class RankedSkill:
             "patterns": self.patterns,
             "why_matched": self.why_matched,
             "penalties": self.penalties,
+            "risks": self.risks,
+            "adaptation_hints": self.adaptation_hints,
         }
-

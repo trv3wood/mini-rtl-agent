@@ -49,7 +49,10 @@ Current skills:
 | `i2c_master` | Wishbone-controlled I2C master | OpenCores I2C |
 | `spi_master` | Configurable SPI master shifter | OpenCores SPI |
 | `wishbone_reg_block` | Control/status register wrapper | OpenCores I2C/SPI style |
+| `axis_fifo` | AXI-stream elastic FIFO with occupancy count | alexforencich/verilog-axis |
 | `axis_handshake_buffer` | ready/valid skid or pipeline buffer | alexforencich/verilog-axis |
+| `axis_srl_fifo` | shallow AXI-stream SRL/shift-register FIFO | alexforencich/verilog-axis |
+| `axis_pipeline_fifo` | AXI-stream register-slice/pipeline FIFO for timing | alexforencich/verilog-axis |
 | `round_robin_arbiter` | Fair one-hot request arbiter | alexforencich/verilog-axis |
 | `reset_synchronizer` | async assert, sync release reset CDC | alexforencich/verilog-axis |
 
@@ -112,11 +115,55 @@ The retriever:
 
 - Uses `positive_terms` with `ripgrep`.
 - Loads matched `module_info.json` files.
+- Also searches `skill_spec.json` when present and scores matches against its `retrieval_text`, claims, and unknowns.
 - Scores category, interfaces, patterns, ports, parameters, constraints, keywords, and README matches.
 - Penalizes `negative_terms`.
-- Returns ranked skills with `why_matched` and `penalties`.
+- Returns ranked skills with `why_matched`, `penalties`, `risks`, and `adaptation_hints`.
 
 LangChain integration is exposed as a tool named `retrieve_rtl_skills`. The tool accepts the same query-plan fields plus optional `skills_root` and `limit`. It does not call an LLM and does not let the model choose the final skill.
+
+Export local skills to a SkillRouter-compatible JSONL pool:
+
+```sh
+python3 -m skill_retriever export-skillrouter-pool \
+  --skills-root skills \
+  --output /tmp/local_rtl_skillrouter_pool.jsonl
+```
+
+Each JSONL record contains `skill_id`, `name`, `description`, `body`, and `source_path`. When `skill_spec.json` exists, the exporter uses its `retrieval_text`, claims, and unknowns; otherwise it falls back to `module_info.json` and `README.md`.
+
+Prepare a single `query_plan.json` for external SkillRouter embedding retrieval without running the model:
+
+```sh
+python3 -m skill_retriever prepare-skillrouter-query query_plan.json \
+  --skills-root skills \
+  --output-dir /tmp/local_rtl_skillrouter_query \
+  --tier easy
+```
+
+This writes `tasks.jsonl`, `relevance.json`, `manifest.json`, and `easy/part-00000.jsonl`, then prints the external `src.export_retrieval` command to run from `external/SkillRouter/`.
+
+After external SkillRouter writes `outputs/local_rtl_query/retrieval/easy.json`, fuse that semantic result with the local lexical/spec-aware retriever:
+
+```sh
+python3 -m skill_retriever fuse-skillrouter-results query_plan.json \
+  --skills-root skills \
+  --retrieval-json external/SkillRouter/outputs/local_rtl_query/retrieval/easy.json \
+  --task-id local_query \
+  --format json
+```
+
+The fused JSON contains `lexical_results`, `semantic_results`, and final `results`. Semantic hits include `external SkillRouter rank ...` in `why_matched`.
+
+Run the small seed router benchmark:
+
+```sh
+python3 -m skill_retriever benchmark benchmarks/router_benchmark.json \
+  --skills-root skills \
+  --limit 10
+```
+
+The benchmark reports `hit@1`, `mrr@10`, and `recall@5/10/20`. It is a regression seed set for the current curated skills, covering standalone parameter customization, dependency/composite-style retrieval, and similar-skill distinction; it is not a claim of broad router quality.
 
 ## LLM HDL Agent Demo
 
@@ -212,7 +259,9 @@ Pipeline:
 - Extracts module names, parameters, ports, comments, likely FSM states, instances, and common patterns.
 - Builds `SkillCandidate` dependency closures from root/internal modules and classifies unresolved dependencies.
 - Classifies skills by category, interfaces, keywords, and design patterns through the configured LLM.
-- Emits `module_info.json`, LLM-facing `README.md`, educational `template.v`, `manifest.json`, `quality.json`, copied closure sources under `rtl/`, `examples/instantiation.v`, and `examples/tb_<module>.v`.
+- Emits `module_info.json`, LLM-facing `README.md`, educational `template.v`, `manifest.json`, `closure.json`, `quality.json`, `module_ir.json`, `evidence.json`, `skill_spec.json`, `provenance.json`, `adaptation.json`, copied closure sources under `rtl/`, `examples/instantiation.v`, `examples/tb_<module>.v`, and `tests/generated/generated_smoke_tb.v`.
+- Creates `tests/original/README.md` to explicitly mark upstream/original tests as not imported yet.
+- Writes per-stage tool records under `tool_runs/`: `frontend.json`, `source_compile.json`, `tb_compile.json`, and `simulation.json`.
 - Runs staged verification when `iverilog`/`vvp` are available: source-closure compile, generated testbench compile, then smoke simulation.
 - Writes `report.json` with frontend, candidate, dependency, staged verification, quality-tier, and legacy per-skill fields.
 
@@ -240,6 +289,8 @@ The generated templates are intentionally simplified teaching implementations. T
 - Generated `template.v` files are educational and reproducible, not production-ready replacements for the source RTL.
 - `gold_candidate` means generated smoke checks passed; it is not a claim of functional correctness.
 - `source_refs` are provenance records only; they are not runtime dependencies and the builder does not download external code.
+- `evidence.json` is the first EvidencePack layer. It records deterministic observations such as ports, parameters, instances, clock/reset candidates, comments, FSM hints, and verification stages.
+- `skill_spec.json` is generated by a dedicated evidence-aware structured LLM call plus deterministic tool claims. Semantic claims must cite known `evidence_ids`; unknown IDs fail the build instead of being silently accepted. Semantic claims should still be treated as inferred unless separately validated.
 
 ## Notes
 
