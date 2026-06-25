@@ -1,0 +1,27 @@
+{
+  "skill_id": "axis_srl_fifo",
+  "name": "axis_srl_fifo",
+  "granularity": "primitive",
+  "project": "alexforencich/verilog-axis",
+  "core_function": "Small AXI-stream FIFO intended for LUT/SRL-style short-depth buffering with ready/valid handshakes.",
+  "algorithm": "Favor this skill when the query mentions SRL, shift register, LUTRAM, shallow FIFO, or small depth.",
+  "interface": {
+    "input": "axis, ready_valid, fifo",
+    "output": "axis, ready_valid, fifo"
+  },
+  "structure": [
+    "Store stream data in a packed shift-register array.",
+    "Shift entries toward the output on each accepted output transfer.",
+    "Append new input data at the current occupancy index.",
+    "Track occupancy with a small count register."
+  ],
+  "parameters": [
+    "DATA_WIDTH",
+    "DEPTH"
+  ],
+  "dependencies": [],
+  "used_by": [],
+  "rtl_files": [
+    "rtl/axis_srl_fifo.v"
+  ]
+}

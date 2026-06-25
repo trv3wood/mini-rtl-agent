@@ -1,0 +1,29 @@
+{
+  "skill_id": "axis_adapter",
+  "name": "axis_adapter",
+  "granularity": "primitive",
+  "project": "alexforencich/verilog-axis",
+  "core_function": "AXI-stream width adapter for ready/valid data paths.",
+  "algorithm": "Convert stream data width with zero extension or truncation while preserving handshake alignment.",
+  "interface": {
+    "input": "axis, ready_valid",
+    "output": "axis, ready_valid"
+  },
+  "structure": [
+    "width converter",
+    "ready/valid pass-through",
+    "zero extension or truncation"
+  ],
+  "parameters": [
+    "S_DATA_WIDTH",
+    "M_DATA_WIDTH"
+  ],
+  "dependencies": [],
+  "used_by": [
+    "axis_fifo",
+    "axis_switch"
+  ],
+  "rtl_files": [
+    "rtl/axis_adapter.v"
+  ]
+}

@@ -80,6 +80,7 @@ def run_benchmark(dataset_path: Path, skills_root: Path, limit: int = 20) -> dic
         "limit": limit,
         "case_count": len(case_results),
         "metrics": aggregate(case_results),
+        "compact_card_metrics": compact_card_metrics(cases, skills_root),
         "cases": case_results,
     }
 
@@ -101,3 +102,56 @@ def recall_at_k(ranked_names: list[str], relevant: set[str], k: int) -> float:
     if not relevant:
         return 0.0
     return len(set(ranked_names[:k]) & relevant) / len(relevant)
+
+
+def compact_card_metrics(cases: list[BenchmarkCase], skills_root: Path) -> dict[str, Any]:
+    cards = load_compact_cards(skills_root)
+    if not cards:
+        return {
+            "card_count": 0,
+            "avg_text_length": 0.0,
+            "keyword_match_rate": 0.0,
+        }
+    lengths = [word_count(str(card.get("retrieval_text", ""))) for card in cards]
+    return {
+        "card_count": len(cards),
+        "avg_text_length": sum(lengths) / len(lengths),
+        "keyword_match_rate": keyword_match_rate(cases, cards),
+    }
+
+
+def load_compact_cards(skills_root: Path) -> list[dict[str, Any]]:
+    cards = []
+    for path in sorted(skills_root.rglob("compact_card.json")):
+        try:
+            card = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(card, dict):
+            cards.append(card)
+    return cards
+
+
+def keyword_match_rate(cases: list[BenchmarkCase], cards: list[dict[str, Any]]) -> float:
+    if not cases:
+        return 0.0
+    matched = 0
+    for case in cases:
+        terms = {normalize_term(term) for term in case.query_plan.positive_terms + case.query_plan.required_features}
+        terms.discard("")
+        card_keywords = {
+            normalize_term(keyword)
+            for card in cards
+            for keyword in card.get("keywords", [])
+        }
+        if terms & card_keywords:
+            matched += 1
+    return matched / len(cases)
+
+
+def word_count(text: str) -> int:
+    return len(text.split())
+
+
+def normalize_term(text: str) -> str:
+    return str(text).lower().replace("_", " ").strip()

@@ -1,0 +1,27 @@
+{
+  "skill_id": "axis_adapter",
+  "name": "axis_adapter",
+  "core_function": "AXI-stream width adapter for ready/valid data paths.",
+  "algorithm": "Data width conversion with handshake alignment.",
+  "structure": [
+    "width converter",
+    "ready/valid pass-through",
+    "zero extension or truncation"
+  ],
+  "interface_signature": "AXIS -> AXIS",
+  "granularity": "primitive",
+  "project": "alexforencich/verilog-axis",
+  "keywords": [
+    "axis",
+    "adapter",
+    "width conversion",
+    "data width",
+    "tdata",
+    "tvalid",
+    "tready",
+    "stream",
+    "ready valid",
+    "pipeline"
+  ],
+  "retrieval_text": "AXI stream width adapter for data width conversion with ready valid handshake alignment. Converts tdata between source and master widths using zero extension or truncation."
+}

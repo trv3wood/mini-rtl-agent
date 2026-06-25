@@ -28,7 +28,6 @@ def main(argv: list[str] | None = None) -> int:
         default="all",
         help="Select skill candidates: all modules for compatibility, or root modules only.",
     )
-
     args = parser.parse_args(argv)
     if args.command == "build":
         try:
@@ -44,8 +43,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"scanned RTL files: {report['rtl_files_scanned']}")
         print(f"modules extracted: {report['modules_extracted']}")
         print(f"skills generated: {report['skills_generated']}")
+        print(f"package format: {report['package_format']}")
         print(f"report: {Path(args.output) / 'report.json'}")
-        failed = [skill for skill in report["skills"] if not skill["sim_ok"]]
+        failed = [skill for skill in report["skills"] if skill.get("sim_ok") is False]
         if failed:
             print(f"WARNING: {len(failed)} generated testbench(es) did not pass")
         return 0

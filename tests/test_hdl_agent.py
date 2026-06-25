@@ -27,7 +27,9 @@ class FakeLLM:
         self.text_prompts.append(messages)
         prompt = messages[-1]["content"]
         assert "Selected skill: uart_tx" in prompt
-        assert "template.v" in prompt
+        assert "skill.json" in prompt
+        assert "compact_card.json" in prompt
+        assert "RTL source" in prompt
         return """```verilog
 module demo_uart_tx(input wire clk, input wire rst, output wire txd);
   assign txd = rst ? 1'b1 : clk;

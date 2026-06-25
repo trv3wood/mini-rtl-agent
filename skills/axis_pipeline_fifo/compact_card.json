@@ -1,0 +1,28 @@
+{
+  "skill_id": "axis_pipeline_fifo",
+  "name": "axis_pipeline_fifo",
+  "core_function": "AXI-stream pipeline FIFO/register slice for timing closure with a small number of ready/valid stages.",
+  "algorithm": "Favor this skill when the query mentions timing closure, pipeline FIFO, register slice, or added latency.",
+  "structure": [
+    "Build a chain of ready/valid storage stages.",
+    "A stage can accept when it is empty or the next stage accepts.",
+    "Backpressure ripples upstream through stage-ready signals.",
+    "Data advances one stage per clock when downstream is ready."
+  ],
+  "interface_signature": "axis, ready_valid, pipeline",
+  "granularity": "primitive",
+  "project": "alexforencich/verilog-axis",
+  "keywords": [
+    "axis pipeline fifo",
+    "pipeline fifo",
+    "register slice",
+    "timing closure",
+    "ready valid pipeline",
+    "latency",
+    "pipeline stage",
+    "tvalid",
+    "tready",
+    "axis"
+  ],
+  "retrieval_text": "AXI-stream pipeline FIFO/register slice for timing closure with a small number of ready/valid stages. Favor this skill when the query mentions timing closure, pipeline FIFO, register slice, or added latency. Build a chain of ready/valid storage stages. A stage can"
+}

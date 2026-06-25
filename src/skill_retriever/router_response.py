@@ -42,7 +42,17 @@ def selected_risks(skill: RankedSkill) -> list[str]:
 
 def source_path(skill: RankedSkill) -> str | None:
     skill_dir = Path(skill.path)
-    for relative in ("rtl/root_module.sv", "rtl/root_module.v", "template.v"):
+    skill_json_path = skill_dir / "skill.json"
+    if skill_json_path.exists():
+        try:
+            skill_json = json.loads(skill_json_path.read_text(encoding="utf-8"))
+        except Exception:
+            skill_json = {}
+        for item in flatten(skill_json.get("rtl_files")):
+            candidate = skill_dir / str(item)
+            if candidate.exists():
+                return candidate.as_posix()
+    for relative in ("rtl/root_module.sv", "rtl/root_module.v"):
         candidate = skill_dir / relative
         if candidate.exists():
             return candidate.as_posix()
@@ -52,20 +62,6 @@ def source_path(skill: RankedSkill) -> str | None:
             matches = sorted(rtl_dir.glob(suffix))
             if matches:
                 return matches[0].as_posix()
-    module_info_path = skill_dir / "module_info.json"
-    if module_info_path.exists():
-        try:
-            module_info = json.loads(module_info_path.read_text(encoding="utf-8"))
-        except Exception:
-            module_info = {}
-        source_refs = module_info.get("source_refs")
-        if isinstance(source_refs, list) and source_refs:
-            first = source_refs[0]
-            if isinstance(first, dict) and first.get("path"):
-                return str(first["path"])
-        for item in flatten(module_info.get("source_files")):
-            if str(item).strip():
-                return str(item)
     return skill.path
 
 

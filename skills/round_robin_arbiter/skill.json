@@ -1,0 +1,27 @@
+{
+  "skill_id": "round_robin_arbiter",
+  "name": "round_robin_arbiter",
+  "granularity": "primitive",
+  "project": "alexforencich/verilog-axis",
+  "core_function": "Fair arbiter that grants one of N requesters and rotates priority after successful grant.",
+  "algorithm": "When one or more request bits are high, grant exactly one eligible requester. After an acknowledged",
+  "interface": {
+    "input": "arbiter",
+    "output": "arbiter"
+  },
+  "structure": [
+    "Keep a priority pointer containing the index after the last accepted grant.",
+    "Mask requests below the priority pointer, grant from high-priority region first, then wrap.",
+    "Grant exactly one requester when any request is active.",
+    "Rotate only on acknowledged grants, not on idle cycles."
+  ],
+  "parameters": [
+    "PORTS",
+    "LOCK_ENABLE"
+  ],
+  "dependencies": [],
+  "used_by": [],
+  "rtl_files": [
+    "rtl/round_robin_arbiter.v"
+  ]
+}

@@ -81,7 +81,7 @@ def test_curated_arbiter_query_ranks_round_robin_first(tmp_path: Path) -> None:
     results = retrieve_skills(plan, Path("skills"), limit=3)
     assert results[0].name == "round_robin_arbiter"
     assert results[0].score > 0
-    assert any("category matched" in why for why in results[0].why_matched)
+    assert any("arbiter" in why for why in results[0].why_matched)
 
 
 def test_negative_term_penalty_ranks_sync_fifo_above_async_fifo() -> None:
@@ -100,53 +100,65 @@ def test_negative_term_penalty_ranks_sync_fifo_above_async_fifo() -> None:
     assert async_result.penalties
 
 
-def test_skill_spec_retrieval_text_participates_in_recall_and_scoring(tmp_path: Path) -> None:
+def test_curated_axis_adapter_width_queries_rank_axis_adapter_first() -> None:
+    for plan in (
+        QueryPlan(
+            intent="AXI stream width adapter",
+            positive_terms=["axis", "stream", "width", "adapter", "ready", "valid"],
+            negative_terms=["fifo", "queue"],
+            likely_categories=["streaming"],
+            likely_interfaces=["axis"],
+            required_features=["width conversion", "handshake alignment"],
+        ),
+        QueryPlan(
+            intent="stream width conversion",
+            positive_terms=["stream", "width conversion", "data width", "adapter", "tvalid", "tready"],
+            negative_terms=["fifo", "storage"],
+            likely_categories=["streaming"],
+            likely_interfaces=["axis"],
+            required_features=["zero extension", "truncation"],
+        ),
+    ):
+        results = retrieve_skills(plan, Path("skills"), limit=3)
+        assert results[0].name == "axis_adapter"
+
+
+def test_compact_card_retrieval_text_participates_in_recall_and_scoring(tmp_path: Path) -> None:
     skills_root = tmp_path / "skills"
     generic = skills_root / "generic_register"
     semantic = skills_root / "axis_latency_guard"
     generic.mkdir(parents=True)
     semantic.mkdir(parents=True)
-    base_info = {
-        "category": "rtl",
-        "interfaces": [],
-        "patterns": [],
-        "ports": [],
-        "parameters": [],
-        "constraints": [],
-        "keywords": [],
-    }
-    (generic / "module_info.json").write_text(
-        json.dumps({"name": "generic_register", **base_info}),
-        encoding="utf-8",
-    )
-    (generic / "README.md").write_text("plain register", encoding="utf-8")
-    (semantic / "module_info.json").write_text(
-        json.dumps({"name": "axis_latency_guard", **base_info}),
-        encoding="utf-8",
-    )
-    (semantic / "skill_spec.json").write_text(
+    (generic / "compact_card.json").write_text(
         json.dumps(
             {
-                "retrieval_text": "AXI Stream latency guard preserves ready valid backpressure ordering",
-                "unknowns": ["Latency bound is unverified."],
-                "claims": [
-                    {
-                        "kind": "behavior",
-                        "claim": "Preserves ready valid backpressure ordering.",
-                        "status": "inferred",
-                        "evidence_ids": ["E_PORT_001"],
-                    }
-                ],
+                "skill_id": "generic_register",
+                "name": "generic_register",
+                "core_function": "Plain register",
+                "algorithm": "Register storage",
+                "structure": ["register"],
+                "interface_signature": "clk -> q",
+                "granularity": "primitive",
+                "project": "test",
+                "keywords": ["register"],
+                "retrieval_text": "plain register",
             }
         ),
         encoding="utf-8",
     )
-    (semantic / "adaptation.json").write_text(
+    (semantic / "compact_card.json").write_text(
         json.dumps(
             {
-                "customizable_parameters": [{"name": "DATA_WIDTH", "default": "32"}],
-                "modification_risks": ["Changing interface width requires revalidation."],
-                "revalidation_required": ["source_compile", "smoke_simulation"],
+                "skill_id": "axis_latency_guard",
+                "name": "axis_latency_guard",
+                "core_function": "AXI Stream latency guard",
+                "algorithm": "Preserves ready valid backpressure ordering",
+                "structure": ["ready valid guard"],
+                "interface_signature": "axis",
+                "granularity": "primitive",
+                "project": "test",
+                "keywords": ["axis", "latency", "ready", "valid", "backpressure"],
+                "retrieval_text": "AXI Stream latency guard preserves ready valid backpressure ordering",
             }
         ),
         encoding="utf-8",
@@ -161,9 +173,7 @@ def test_skill_spec_retrieval_text_participates_in_recall_and_scoring(tmp_path: 
     )
     results = retrieve_skills(plan, skills_root, limit=5)
     assert results[0].name == "axis_latency_guard"
-    assert any("skill_spec" in why for why in results[0].why_matched)
-    assert "Latency bound is unverified." in results[0].risks
-    assert "set parameter DATA_WIDTH (default 32)" in results[0].adaptation_hints
+    assert any("retrieval_text" in why for why in results[0].why_matched)
 
 
 def test_cli_table_and_json_output(tmp_path: Path) -> None:
@@ -228,7 +238,7 @@ def test_router_response_matches_goal_contract_for_local_ranking(tmp_path: Path)
     assert payload["selected_skill"] == "uart_tx"
     assert "uart_tx" in payload["candidate_skills"]
     assert "interface: uart" in payload["matched_capabilities"]
-    assert payload["source_path"].endswith("skills/uart_tx/template.v")
+    assert payload["source_path"].endswith("skills/uart_tx/rtl/uart_tx.v")
     assert payload["results"][0]["name"] == "uart_tx"
 
 
@@ -266,64 +276,39 @@ def test_cli_route_outputs_goal_contract_with_external_fusion(tmp_path: Path) ->
     payload = json.loads(run.stdout)
     assert payload["selected_skill"] == "uart_tx"
     assert payload["candidate_skills"][0] == "uart_tx"
-    assert payload["source_path"].endswith("skills/uart_tx/template.v")
+    assert payload["source_path"].endswith("skills/uart_tx/rtl/uart_tx.v")
     assert any("external SkillRouter rank 1" in why for why in payload["results"][0]["why_matched"])
 
 
-def test_export_skillrouter_pool_prefers_skill_spec_and_falls_back_to_module_info(tmp_path: Path) -> None:
-    skills_root = tmp_path / "skills"
-    spec_skill = skills_root / "spec_skill"
-    fallback_skill = skills_root / "fallback_skill"
-    spec_skill.mkdir(parents=True)
-    fallback_skill.mkdir(parents=True)
-    (spec_skill / "module_info.json").write_text(
+def test_export_skillrouter_pool_supports_compact_card_only_skills(tmp_path: Path) -> None:
+    skill = tmp_path / "skills" / "axis_adapter"
+    skill.mkdir(parents=True)
+    (skill / "compact_card.json").write_text(
         json.dumps(
             {
-                "name": "spec_skill",
-                "description": "module info description",
-                "category": "buffering",
-                "interfaces": ["ready_valid"],
+                "skill_id": "axis_adapter",
+                "name": "axis_adapter",
+                "core_function": "AXI stream width adapter",
+                "algorithm": "width conversion",
+                "structure": ["width converter"],
+                "interface_signature": "AXIS -> AXIS",
+                "granularity": "primitive",
+                "project": "test",
+                "keywords": ["axis", "adapter", "width"],
+                "retrieval_text": "AXI stream width adapter for width conversion.",
             }
         ),
         encoding="utf-8",
     )
-    (spec_skill / "skill_spec.json").write_text(
-        json.dumps(
-            {
-                "skill_id": "spec_skill",
-                "retrieval_text": "semantic ready valid skid buffer retrieval text",
-                "claims": [
-                    {
-                        "kind": "function",
-                        "status": "inferred",
-                        "claim": "Provides ready valid buffering.",
-                    }
-                ],
-                "unknowns": ["Latency is unverified."],
-            }
-        ),
+    (skill / "skill.json").write_text(
+        json.dumps({"skill_id": "axis_adapter", "rtl_files": ["rtl/axis_adapter.v"]}),
         encoding="utf-8",
     )
-    (fallback_skill / "module_info.json").write_text(
-        json.dumps(
-            {
-                "name": "fallback_skill",
-                "description": "Fallback description from module info.",
-                "category": "serial",
-                "interfaces": ["uart"],
-            }
-        ),
-        encoding="utf-8",
-    )
-    (fallback_skill / "README.md").write_text("Fallback README body.", encoding="utf-8")
-
-    records = export_skillrouter_records(skills_root)
-    by_id = {record["skill_id"]: record for record in records}
-    assert set(by_id) == {"spec_skill", "fallback_skill"}
-    assert "semantic ready valid skid buffer retrieval text" in by_id["spec_skill"]["body"]
-    assert "Provides ready valid buffering." in by_id["spec_skill"]["description"]
-    assert "Fallback description from module info." in by_id["fallback_skill"]["description"]
-    assert "Fallback README body." in by_id["fallback_skill"]["body"]
+    records = export_skillrouter_records(tmp_path / "skills")
+    assert records[0]["skill_id"] == "axis_adapter"
+    assert records[0]["description"] == "AXI stream width adapter"
+    assert "retrieval_text" in records[0]["body"]
+    assert "rtl/axis_adapter.v" in records[0]["body"]
 
 
 def test_cli_export_skillrouter_pool(tmp_path: Path) -> None:
@@ -355,8 +340,25 @@ def test_prepare_skillrouter_query_data_writes_tasks_and_pool(tmp_path: Path) ->
     skills_root = tmp_path / "skills"
     skill = skills_root / "uart_tx"
     skill.mkdir(parents=True)
-    (skill / "module_info.json").write_text(
-        json.dumps({"name": "uart_tx", "description": "UART transmitter", "category": "serial"}),
+    (skill / "compact_card.json").write_text(
+        json.dumps(
+            {
+                "skill_id": "uart_tx",
+                "name": "uart_tx",
+                "core_function": "UART transmitter",
+                "algorithm": "serial frame generation",
+                "structure": ["start data stop bits"],
+                "interface_signature": "uart",
+                "granularity": "primitive",
+                "project": "test",
+                "keywords": ["uart", "transmitter"],
+                "retrieval_text": "UART transmitter serial frame generation.",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (skill / "skill.json").write_text(
+        json.dumps({"skill_id": "uart_tx", "rtl_files": ["rtl/uart_tx.v"]}),
         encoding="utf-8",
     )
     plan = QueryPlan(
@@ -1283,7 +1285,77 @@ def test_router_benchmark_computes_metrics(tmp_path: Path) -> None:
     assert payload["case_count"] == 1
     assert payload["metrics"]["hit_at_1"] == 1.0
     assert payload["metrics"]["mrr_at_10"] == 1.0
+    assert payload["compact_card_metrics"]["card_count"] >= 1
     assert payload["cases"][0]["first_relevant_rank"] == 1
+
+
+def test_router_benchmark_reports_compact_card_metrics(tmp_path: Path) -> None:
+    skills_root = tmp_path / "skills"
+    skill = skills_root / "axis_adapter"
+    skill.mkdir(parents=True)
+    (skill / "compact_card.json").write_text(
+        json.dumps(
+            {
+                "skill_id": "axis_adapter",
+                "name": "axis_adapter",
+                "core_function": "AXI stream width adapter",
+                "algorithm": "width conversion",
+                "structure": ["width converter"],
+                "interface_signature": "AXIS -> AXIS",
+                "granularity": "primitive",
+                "project": "test",
+                "keywords": ["axis", "adapter", "width"],
+                "retrieval_text": "AXI stream width adapter for width conversion.",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (skill / "skill.json").write_text(
+        json.dumps(
+            {
+                "skill_id": "axis_adapter",
+                "name": "axis_adapter",
+                "granularity": "primitive",
+                "project": "test",
+                "core_function": "AXI stream width adapter",
+                "algorithm": "width conversion",
+                "interface": {"input": "AXIS", "output": "AXIS"},
+                "structure": ["width converter"],
+                "parameters": [],
+                "dependencies": [],
+                "used_by": [],
+                "rtl_files": ["rtl/axis_adapter.v"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    dataset = tmp_path / "benchmark.json"
+    dataset.write_text(
+        json.dumps(
+            {
+                "cases": [
+                    {
+                        "id": "axis_adapter_case",
+                        "query_plan": {
+                            "intent": "AXI stream width adapter",
+                            "positive_terms": ["axis", "width"],
+                            "negative_terms": [],
+                            "likely_categories": ["primitive"],
+                            "likely_interfaces": ["axis"],
+                            "required_features": ["adapter"],
+                        },
+                        "relevant_skill_ids": ["axis_adapter"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    payload = run_benchmark(dataset, skills_root, limit=5)
+    assert payload["metrics"]["hit_at_1"] == 1.0
+    assert payload["compact_card_metrics"]["card_count"] == 1
+    assert payload["compact_card_metrics"]["avg_text_length"] <= 60
+    assert payload["compact_card_metrics"]["keyword_match_rate"] == 1.0
 
 
 def test_cli_router_benchmark_json_and_table() -> None:
@@ -1307,7 +1379,7 @@ def test_cli_router_benchmark_json_and_table() -> None:
         check=True,
     )
     payload = json.loads(json_run.stdout)
-    assert payload["case_count"] == 12
+    assert payload["case_count"] == 14
     assert "hit_at_1" in payload["metrics"]
 
     table_run = subprocess.run(
@@ -1328,6 +1400,7 @@ def test_cli_router_benchmark_json_and_table() -> None:
         check=True,
     )
     assert "hit@1=" in table_run.stdout
+    assert "avg_text_length=" in table_run.stdout
     assert "uart_transmitter_ready_valid" in table_run.stdout
 
 
@@ -1361,4 +1434,4 @@ def test_langchain_route_tool_impl_returns_agent_contract(tmp_path: Path) -> Non
     )
     assert payload["selected_skill"] == "uart_tx"
     assert payload["candidate_skills"][0] == "uart_tx"
-    assert payload["source_path"].endswith("skills/uart_tx/template.v")
+    assert payload["source_path"].endswith("skills/uart_tx/rtl/uart_tx.v")

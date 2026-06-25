@@ -1,0 +1,28 @@
+{
+  "skill_id": "spi_master",
+  "name": "spi_master",
+  "core_function": "SPI master that shifts words over MOSI/MISO with configurable clock polarity, phase, divider, and chip select.",
+  "algorithm": "Use a divider counter to generate SCLK edge enables from clk. Keep TX and RX shift",
+  "structure": [
+    "Use a divider counter to derive SCLK enable strobes rather than a generated clock when possible.",
+    "Separate launch and sample edges to support CPHA modes.",
+    "Shift TX and RX registers in opposite directions according to bit order.",
+    "Keep chip select asserted across the whole word and optionally across bursts."
+  ],
+  "interface_signature": "spi, register_control",
+  "granularity": "primitive",
+  "project": "freecores/spi",
+  "keywords": [
+    "spi",
+    "master",
+    "mosi",
+    "miso",
+    "sclk",
+    "chip select",
+    "cpol",
+    "cpha",
+    "shift register",
+    "register_control"
+  ],
+  "retrieval_text": "SPI master that shifts words over MOSI/MISO with configurable clock polarity, phase, divider, and chip select. Use a divider counter to generate SCLK edge enables from clk. Keep TX and RX shift Use a divider counter to derive SCLK enable"
+}

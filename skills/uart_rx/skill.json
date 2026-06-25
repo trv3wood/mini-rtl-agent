@@ -1,0 +1,26 @@
+{
+  "skill_id": "uart_rx",
+  "name": "uart_rx",
+  "granularity": "primitive",
+  "project": "alexforencich/verilog-uart",
+  "core_function": "UART receiver that detects a start bit, samples serial data near bit centers, and emits received words with",
+  "algorithm": "Detect a falling edge or low level on idle-high rxd, then wait half a bit before",
+  "interface": {
+    "input": "uart, ready_valid",
+    "output": "uart, ready_valid"
+  },
+  "structure": [
+    "Register the asynchronous-looking serial input before using it in control logic.",
+    "Use half-bit delay after falling edge detection to align to bit centers.",
+    "Shift sampled bits into a holding register LSB first.",
+    "Hold output valid until the downstream ready handshake consumes it."
+  ],
+  "parameters": [
+    "DATA_WIDTH"
+  ],
+  "dependencies": [],
+  "used_by": [],
+  "rtl_files": [
+    "rtl/uart_rx.v"
+  ]
+}

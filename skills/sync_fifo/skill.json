@@ -1,0 +1,28 @@
+{
+  "skill_id": "sync_fifo",
+  "name": "sync_fifo",
+  "granularity": "primitive",
+  "project": "freecores/generic_fifos",
+  "core_function": "Single-clock FIFO with write/read enables, full/empty flags, and optional count tracking.",
+  "algorithm": "Use circular read/write pointers and a count register or extra pointer bit to distinguish full from",
+  "interface": {
+    "input": "fifo",
+    "output": "fifo"
+  },
+  "structure": [
+    "Store payloads in a reg array addressed by circular write/read pointers.",
+    "Update count with combined read/write cases to avoid off-by-one flag bugs.",
+    "Allow simultaneous read and write when neither operation violates full/empty semantics.",
+    "Derive full and empty from registered count for simple timing."
+  ],
+  "parameters": [
+    "DATA_WIDTH",
+    "DEPTH",
+    "ADDR_WIDTH"
+  ],
+  "dependencies": [],
+  "used_by": [],
+  "rtl_files": [
+    "rtl/sync_fifo.v"
+  ]
+}

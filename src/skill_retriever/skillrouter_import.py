@@ -28,15 +28,21 @@ def load_skillrouter_ids(retrieval_json: Path, task_id: str) -> list[str]:
 
 def skill_id_index(skills_root: Path) -> dict[str, Path]:
     index: dict[str, Path] = {}
-    for module_info_path in sorted(skills_root.rglob("module_info.json")):
-        candidate = load_candidate(module_info_path)
+    for metadata_path in sorted(skills_root.rglob("compact_card.json")):
+        candidate = load_candidate(metadata_path)
         if candidate is None:
             continue
-        index[candidate.name] = module_info_path
-        index[module_info_path.parent.name] = module_info_path
-        skill_spec_id = candidate.skill_spec.get("skill_id")
-        if skill_spec_id:
-            index[str(skill_spec_id)] = module_info_path
+        index[candidate.name] = metadata_path
+        index[metadata_path.parent.name] = metadata_path
+        skill_json_path = metadata_path.parent / "skill.json"
+        if skill_json_path.exists():
+            try:
+                skill_json = json.loads(skill_json_path.read_text(encoding="utf-8"))
+            except Exception:
+                skill_json = {}
+            skill_id = skill_json.get("skill_id")
+            if skill_id:
+                index[str(skill_id)] = metadata_path
     return index
 
 

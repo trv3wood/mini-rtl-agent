@@ -1,0 +1,28 @@
+{
+  "skill_id": "round_robin_arbiter",
+  "name": "round_robin_arbiter",
+  "core_function": "Fair arbiter that grants one of N requesters and rotates priority after successful grant.",
+  "algorithm": "When one or more request bits are high, grant exactly one eligible requester. After an acknowledged",
+  "structure": [
+    "Keep a priority pointer containing the index after the last accepted grant.",
+    "Mask requests below the priority pointer, grant from high-priority region first, then wrap.",
+    "Grant exactly one requester when any request is active.",
+    "Rotate only on acknowledged grants, not on idle cycles."
+  ],
+  "interface_signature": "arbiter",
+  "granularity": "primitive",
+  "project": "alexforencich/verilog-axis",
+  "keywords": [
+    "arbiter",
+    "round robin",
+    "fairness",
+    "grant",
+    "request",
+    "one hot",
+    "priority",
+    "round",
+    "robin",
+    "ports"
+  ],
+  "retrieval_text": "Fair arbiter that grants one of N requesters and rotates priority after successful grant. When one or more request bits are high, grant exactly one eligible requester. After an acknowledged Keep a priority pointer containing the index after the last"
+}

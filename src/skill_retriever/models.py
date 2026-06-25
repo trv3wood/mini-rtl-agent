@@ -58,12 +58,8 @@ class QueryPlan:
 class Candidate:
     name: str
     skill_dir: Path
-    module_info_path: Path
-    module_info: dict[str, Any]
-    readme_text: str = ""
-    skill_spec: dict[str, Any] = field(default_factory=dict)
-    skill_spec_text: str = ""
-    adaptation: dict[str, Any] = field(default_factory=dict)
+    card_path: Path
+    card: dict[str, Any]
 
 
 @dataclass

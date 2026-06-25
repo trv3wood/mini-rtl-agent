@@ -1,0 +1,28 @@
+{
+  "skill_id": "wishbone_reg_block",
+  "name": "wishbone_reg_block",
+  "core_function": "Small Wishbone-compatible register block with address decode, read mux, write strobes, acknowledge, and optional interrupt/status bits.",
+  "algorithm": "Derive a write-access strobe from cyc, stb, we, and the acknowledge policy. Use a registered ack",
+  "structure": [
+    "Define write access as cyc & stb & we & ack or cyc & stb & we depending on wait-state policy.",
+    "Generate ack as a registered one-cycle pulse to avoid combinational bus loops.",
+    "Use a case statement for read mux and write decode.",
+    "Clear write-one-to-clear command/interrupt bits explicitly after hardware consumes them."
+  ],
+  "interface_signature": "wishbone, register_file",
+  "granularity": "primitive",
+  "project": "freecores/i2c",
+  "keywords": [
+    "wishbone",
+    "register block",
+    "address decode",
+    "ack",
+    "status",
+    "control",
+    "interrupt",
+    "register_file",
+    "reg",
+    "block"
+  ],
+  "retrieval_text": "Small Wishbone-compatible register block with address decode, read mux, write strobes, acknowledge, and optional interrupt/status bits. Derive a write-access strobe from cyc, stb, we, and the acknowledge policy. Use a registered ack Define write access as cyc & stb &"
+}

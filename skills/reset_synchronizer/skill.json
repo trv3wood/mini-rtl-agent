@@ -1,0 +1,25 @@
+{
+  "skill_id": "reset_synchronizer",
+  "name": "reset_synchronizer",
+  "granularity": "primitive",
+  "project": "alexforencich/verilog-axis",
+  "core_function": "A reset synchronizer primitive with asynchronous assertion and synchronous deassertion in the destination clock domain.",
+  "algorithm": "When rst_in is active, rst_out becomes active immediately or through an asynchronous reset path. When rst_in",
+  "interface": {
+    "input": "reset, cdc",
+    "output": "reset, cdc"
+  },
+  "structure": [
+    "async_assert_sync_release",
+    "multi_stage_flip_flop_synchronizer"
+  ],
+  "parameters": [
+    "STAGES",
+    "RESET_ACTIVE_LEVEL"
+  ],
+  "dependencies": [],
+  "used_by": [],
+  "rtl_files": [
+    "rtl/reset_synchronizer.v"
+  ]
+}

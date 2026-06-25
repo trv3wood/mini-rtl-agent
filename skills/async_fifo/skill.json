@@ -1,0 +1,29 @@
+{
+  "skill_id": "async_fifo",
+  "name": "async_fifo",
+  "granularity": "primitive",
+  "project": "freecores/generic_fifos",
+  "core_function": "Dual-clock FIFO for crossing data between independent write and read clock domains.",
+  "algorithm": "Maintain local binary pointers for RAM addressing and convert the next pointer value to Gray code",
+  "interface": {
+    "input": "fifo, cdc",
+    "output": "fifo, cdc"
+  },
+  "structure": [
+    "Maintain binary pointers locally and convert to Gray code for cross-domain synchronization.",
+    "Synchronize only Gray pointers, never multi-bit binary counters.",
+    "Compute full in the write clock domain and empty in the read clock domain.",
+    "Use true dual-port memory or equivalent RAM inference for independent clocks."
+  ],
+  "parameters": [
+    "DATA_WIDTH",
+    "ADDR_WIDTH"
+  ],
+  "dependencies": [
+    "reset_synchronizer"
+  ],
+  "used_by": [],
+  "rtl_files": [
+    "rtl/async_fifo.v"
+  ]
+}

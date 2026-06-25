@@ -1,0 +1,27 @@
+{
+  "skill_id": "uart_tx",
+  "name": "uart_tx",
+  "granularity": "primitive",
+  "project": "alexforencich/verilog-uart",
+  "core_function": "UART transmitter that accepts a byte or stream word and emits start, data, and stop bits on a",
+  "algorithm": "Use a baud/prescale counter plus a bit counter; do not derive a separate generated clock for",
+  "interface": {
+    "input": "uart, ready_valid",
+    "output": "uart, ready_valid"
+  },
+  "structure": [
+    "Latch input data only when valid and ready are both true.",
+    "Use a prescale counter to hold each serial bit for an exact number of clocks.",
+    "Keep tx high during reset and idle to match UART line convention.",
+    "Expose busy separately from ready so software/testbench can observe frame progress."
+  ],
+  "parameters": [
+    "DATA_WIDTH",
+    "CLKS_PER_BIT"
+  ],
+  "dependencies": [],
+  "used_by": [],
+  "rtl_files": [
+    "rtl/uart_tx.v"
+  ]
+}

@@ -87,7 +87,7 @@ def skillrouter_goal_alignment_payload() -> dict[str, Any]:
             },
             {
                 "requirement": "Retrieve flattened Skill Spec text rather than raw RTL",
-                "current_state": "Local exporter flattens module_info.json, README.md, and skill_spec.json retrieval_text/claims into SkillRouter JSONL records.",
+                "current_state": "Local exporter flattens compact_card.json plus skill.json into SkillRouter JSONL records.",
                 "artifacts": ["src/skill_retriever/skillrouter_export.py"],
             },
             {

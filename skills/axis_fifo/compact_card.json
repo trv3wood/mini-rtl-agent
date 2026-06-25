@@ -1,0 +1,28 @@
+{
+  "skill_id": "axis_fifo",
+  "name": "axis_fifo",
+  "core_function": "AXI-stream ready/valid FIFO for elastic packet or sample buffering with tdata ordering.",
+  "algorithm": "Keep the teaching template data-only; add tkeep, tlast, tid, or tuser only when requested. Handle simultaneous",
+  "structure": [
+    "Map ready/valid handshakes onto FIFO write and read enables.",
+    "Compute s_axis_tready from FIFO vacancy or simultaneous output acceptance.",
+    "Compute m_axis_tvalid from non-empty occupancy.",
+    "Use circular pointers and a count register for deterministic full/empty behavior."
+  ],
+  "interface_signature": "axis, ready_valid, fifo",
+  "granularity": "primitive",
+  "project": "alexforencich/verilog-axis",
+  "keywords": [
+    "axis fifo",
+    "axi stream fifo",
+    "ready valid fifo",
+    "elastic buffer",
+    "burst buffer",
+    "tdata",
+    "tvalid",
+    "tready",
+    "occupancy",
+    "count"
+  ],
+  "retrieval_text": "AXI-stream ready/valid FIFO for elastic packet or sample buffering with tdata ordering. Keep the teaching template data-only; add tkeep, tlast, tid, or tuser only when requested. Handle simultaneous Map ready/valid handshakes onto FIFO write and read enables. Compute s_axis_tready from"
+}

@@ -109,6 +109,30 @@
       "relevant_skill_ids": ["spi_master"]
     },
     {
+      "id": "axis_stream_width_adapter",
+      "query_plan": {
+        "intent": "AXI stream width adapter",
+        "positive_terms": ["axis", "stream", "width", "adapter", "tdata", "ready", "valid"],
+        "negative_terms": ["fifo", "queue", "burst"],
+        "likely_categories": ["streaming"],
+        "likely_interfaces": ["axis", "ready_valid"],
+        "required_features": ["width conversion", "handshake alignment"]
+      },
+      "relevant_skill_ids": ["axis_adapter"]
+    },
+    {
+      "id": "stream_width_conversion",
+      "query_plan": {
+        "intent": "stream width conversion",
+        "positive_terms": ["stream", "width conversion", "data width", "adapter", "tvalid", "tready"],
+        "negative_terms": ["fifo", "storage", "occupancy"],
+        "likely_categories": ["streaming"],
+        "likely_interfaces": ["axis", "ready_valid"],
+        "required_features": ["zero extension", "truncation"]
+      },
+      "relevant_skill_ids": ["axis_adapter"]
+    },
+    {
       "id": "axis_fifo_burst_buffer",
       "query_plan": {
         "intent": "AXI stream FIFO for burst buffering with tvalid tready and occupancy count",

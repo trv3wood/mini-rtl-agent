@@ -10,13 +10,11 @@ from .models import Candidate, QueryPlan, RankedSkill
 
 
 STRUCTURED_FIELDS = (
-    "category",
-    "interfaces",
-    "patterns",
-    "ports",
-    "parameters",
-    "constraints",
+    "core_function",
+    "algorithm",
+    "structure",
     "keywords",
+    "retrieval_text",
 )
 
 
@@ -61,11 +59,7 @@ def rg_matching_module_infos(skills_root: Path, positive_terms: list[str]) -> se
                     "-i",
                     "-l",
                     "--glob",
-                    "module_info.json",
-                    "--glob",
-                    "README.md",
-                    "--glob",
-                    "skill_spec.json",
+                    "compact_card.json",
                     term,
                     str(skills_root),
                 ],
@@ -76,73 +70,66 @@ def rg_matching_module_infos(skills_root: Path, positive_terms: list[str]) -> se
             )
             for line in run.stdout.splitlines():
                 path = Path(line)
-                if path.name == "module_info.json":
+                if path.name == "compact_card.json":
                     matched.add(path)
-                elif path.name in {"README.md", "skill_spec.json"}:
-                    module_info = path.parent / "module_info.json"
-                    if module_info.exists():
-                        matched.add(module_info)
         else:
             needle = normalize(term)
-            for path in (
-                list(skills_root.rglob("module_info.json"))
-                + list(skills_root.rglob("README.md"))
-                + list(skills_root.rglob("skill_spec.json"))
-            ):
+            for path in skills_root.rglob("compact_card.json"):
                 text = path.read_text(encoding="utf-8", errors="ignore")
-                if needle in normalize(text):
-                    matched.add(path if path.name == "module_info.json" else path.parent / "module_info.json")
+                if needle not in normalize(text):
+                    continue
+                matched.add(path)
     if not matched:
-        matched = set(skills_root.rglob("module_info.json"))
+        matched = set(skills_root.rglob("compact_card.json"))
     return matched
+
+
+def candidate_metadata_path(skill_dir: Path) -> Path | None:
+    path = skill_dir / "compact_card.json"
+    return path if path.exists() else None
 
 
 def load_candidate(path: Path) -> Candidate | None:
     try:
-        module_info = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
-    readme_path = path.parent / "README.md"
-    readme_text = readme_path.read_text(encoding="utf-8", errors="ignore") if readme_path.exists() else ""
-    skill_spec_path = path.parent / "skill_spec.json"
-    skill_spec: dict[str, Any] = {}
-    skill_spec_text = ""
-    if skill_spec_path.exists():
-        try:
-            skill_spec = json.loads(skill_spec_path.read_text(encoding="utf-8"))
-            skill_spec_text = skill_spec_search_text(skill_spec)
-        except Exception:
-            skill_spec = {}
-            skill_spec_text = ""
-    adaptation_path = path.parent / "adaptation.json"
-    adaptation: dict[str, Any] = {}
-    if adaptation_path.exists():
-        try:
-            adaptation = json.loads(adaptation_path.read_text(encoding="utf-8"))
-        except Exception:
-            adaptation = {}
+    if path.name != "compact_card.json":
+        return None
+    module_info = module_info_from_compact_card(payload)
     return Candidate(
         name=str(module_info.get("name") or path.parent.name),
         skill_dir=path.parent,
-        module_info_path=path,
-        module_info=module_info,
-        readme_text=readme_text,
-        skill_spec=skill_spec,
-        skill_spec_text=skill_spec_text,
-        adaptation=adaptation,
+        card_path=path,
+        card=module_info,
     )
 
 
-def skill_spec_search_text(skill_spec: dict[str, Any]) -> str:
-    chunks = flatten(skill_spec.get("retrieval_text"))
-    for claim in skill_spec.get("claims", []):
-        if isinstance(claim, dict):
-            chunks.extend(flatten(claim.get("kind")))
-            chunks.extend(flatten(claim.get("claim")))
-            chunks.extend(flatten(claim.get("status")))
-            chunks.extend(flatten(claim.get("conditions")))
-    chunks.extend(flatten(skill_spec.get("unknowns")))
-    return normalize(" ".join(chunks))
+def module_info_from_compact_card(card: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "name": card.get("name"),
+        "category": card.get("granularity") or "",
+        "core_function": card.get("core_function") or "",
+        "algorithm": card.get("algorithm") or "",
+        "interfaces": interface_terms(card.get("interface_signature")),
+        "patterns": card.get("structure") or [],
+        "structure": card.get("structure") or [],
+        "keywords": card.get("keywords", []),
+        "retrieval_text": card.get("retrieval_text", ""),
+    }
+
+
+def interface_terms(signature: Any) -> list[str]:
+    terms: list[str] = []
+    for value in flatten(signature):
+        for part in re_split_interface(str(value)):
+            if part:
+                terms.append(part)
+    return dedupe(terms)
+
+
+def re_split_interface(value: str) -> list[str]:
+    return [part.strip() for part in value.replace("->", ",").split(",")]
 
 
 def field_texts(module_info: dict[str, Any]) -> dict[str, str]:
@@ -153,30 +140,15 @@ def field_texts(module_info: dict[str, Any]) -> dict[str, str]:
 
 
 def score_candidate(candidate: Candidate, plan: QueryPlan) -> RankedSkill:
-    module_info = candidate.module_info
-    texts = field_texts(module_info)
-    readme_text = normalize(candidate.readme_text)
-    skill_spec_text = normalize(candidate.skill_spec_text)
-    category = str(module_info.get("category", ""))
-    interfaces = [str(item) for item in module_info.get("interfaces", [])]
-    patterns = [str(item) for item in module_info.get("patterns", [])]
-    risks = candidate_risks(candidate)
-    adaptation_hints = candidate_adaptation_hints(candidate)
+    card = candidate.card
+    texts = field_texts(card)
+    category = str(card.get("category", ""))
+    interfaces = [str(item) for item in card.get("interfaces", [])]
+    patterns = [str(item) for item in card.get("patterns", [])]
 
     score = 0
     why: list[str] = []
     penalties: list[str] = []
-
-    if normalize(category) in {normalize(item) for item in plan.likely_categories}:
-        score += 18
-        why.append(f"category matched: {category}")
-
-    interface_hits = [
-        item for item in plan.likely_interfaces if normalize(item) in {normalize(i) for i in interfaces}
-    ]
-    if interface_hits:
-        score += 14 * len(interface_hits)
-        why.append(f"interfaces matched: {', '.join(interface_hits)}")
 
     for term in plan.positive_terms:
         needle = normalize(term)
@@ -185,23 +157,17 @@ def score_candidate(candidate: Candidate, plan: QueryPlan) -> RankedSkill:
         hits = [field for field, text in texts.items() if needle in text]
         if hits:
             score += min(18, 5 * len(hits))
-            why.append(f"term '{term}' matched structured fields: {', '.join(hits)}")
-        elif needle in skill_spec_text:
-            score += 7
-            why.append(f"term '{term}' matched skill_spec")
-        elif needle in readme_text:
-            score += 3
-            why.append(f"term '{term}' matched README")
+            why.append(f"term '{term}' matched compact_card fields: {', '.join(hits)}")
 
     for feature in plan.required_features:
         needle = normalize(feature)
-        if any(needle in text for text in texts.values()) or needle in skill_spec_text or needle in readme_text:
+        if any(needle in text for text in texts.values()):
             score += 12
             why.append(f"required feature matched: {feature}")
 
     for term in plan.negative_terms:
         needle = normalize(term)
-        if any(needle in text for text in texts.values()) or needle in skill_spec_text or needle in readme_text:
+        if any(needle in text for text in texts.values()):
             score -= 20
             penalties.append(f"negative term matched: {term}")
 
@@ -214,26 +180,9 @@ def score_candidate(candidate: Candidate, plan: QueryPlan) -> RankedSkill:
         patterns=patterns,
         why_matched=why[:12],
         penalties=penalties,
-        risks=risks[:8],
-        adaptation_hints=adaptation_hints[:8],
+        risks=[],
+        adaptation_hints=[],
     )
-
-
-def candidate_risks(candidate: Candidate) -> list[str]:
-    risks = [str(item) for item in flatten(candidate.skill_spec.get("unknowns")) if str(item).strip()]
-    risks.extend(str(item) for item in flatten(candidate.adaptation.get("modification_risks")) if str(item).strip())
-    return dedupe(risks)
-
-
-def candidate_adaptation_hints(candidate: Candidate) -> list[str]:
-    hints: list[str] = []
-    for parameter in candidate.adaptation.get("customizable_parameters", []):
-        if isinstance(parameter, dict) and parameter.get("name"):
-            default = parameter.get("default", "unspecified")
-            hints.append(f"set parameter {parameter['name']} (default {default})")
-    for item in flatten(candidate.adaptation.get("revalidation_required")):
-        hints.append(f"revalidate: {item}")
-    return dedupe(hints)
 
 
 def dedupe(items: list[str]) -> list[str]:
@@ -247,8 +196,8 @@ def dedupe(items: list[str]) -> list[str]:
 
 
 def retrieve_skills(plan: QueryPlan, skills_root: Path, limit: int = 10) -> list[RankedSkill]:
-    module_info_paths = sorted(rg_matching_module_infos(skills_root, plan.positive_terms))
-    candidates = [candidate for path in module_info_paths if (candidate := load_candidate(path))]
+    card_paths = sorted(rg_matching_module_infos(skills_root, plan.positive_terms))
+    candidates = [candidate for path in card_paths if (candidate := load_candidate(path))]
     ranked = [score_candidate(candidate, plan) for candidate in candidates]
     ranked.sort(key=lambda item: (-item.score, item.name, item.path))
     return ranked[:limit]

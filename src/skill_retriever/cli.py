@@ -53,6 +53,7 @@ def render_benchmark_table(payload: dict) -> str:
         f"hit@1={metrics['hit_at_1']:.3f}  mrr@10={metrics['mrr_at_10']:.3f}  "
         f"recall@5={metrics['recall_at_5']:.3f}  recall@10={metrics['recall_at_10']:.3f}  "
         f"recall@20={metrics['recall_at_20']:.3f}",
+        compact_metrics_line(payload.get("compact_card_metrics", {})),
         "",
         f"{'case':<28}  {'hit@1':>5}  {'mrr@10':>7}  {'first':>5}  ranked",
         "-" * 96,
@@ -62,6 +63,14 @@ def render_benchmark_table(payload: dict) -> str:
         first = item["first_relevant_rank"] if item["first_relevant_rank"] is not None else "-"
         lines.append(f"{item['id']:<28}  {item['hit_at_1']:>5.1f}  {item['mrr_at_10']:>7.3f}  {first!s:>5}  {ranked}")
     return "\n".join(lines)
+
+
+def compact_metrics_line(metrics: dict) -> str:
+    return (
+        f"compact_cards={int(metrics.get('card_count', 0))}  "
+        f"avg_text_length={float(metrics.get('avg_text_length', 0.0)):.1f}  "
+        f"keyword_match_rate={float(metrics.get('keyword_match_rate', 0.0)):.3f}"
+    )
 
 
 def render_result_dicts_table(results: list[dict]) -> str:

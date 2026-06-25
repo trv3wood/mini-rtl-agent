@@ -1,0 +1,26 @@
+{
+  "skill_id": "reset_synchronizer",
+  "name": "reset_synchronizer",
+  "core_function": "A reset synchronizer primitive with asynchronous assertion and synchronous deassertion in the destination clock domain.",
+  "algorithm": "When rst_in is active, rst_out becomes active immediately or through an asynchronous reset path. When rst_in",
+  "structure": [
+    "async_assert_sync_release",
+    "multi_stage_flip_flop_synchronizer"
+  ],
+  "interface_signature": "reset, cdc",
+  "granularity": "primitive",
+  "project": "alexforencich/verilog-axis",
+  "keywords": [
+    "reset",
+    "reset synchronizer",
+    "cdc",
+    "metastability",
+    "asynchronous assertion",
+    "synchronous deassertion",
+    "synchronizer",
+    "stages",
+    "active",
+    "level"
+  ],
+  "retrieval_text": "A reset synchronizer primitive with asynchronous assertion and synchronous deassertion in the destination clock domain. When rst_in is active, rst_out becomes active immediately or through an asynchronous reset path. When rst_in async_assert_sync_release multi_stage_flip_flop_synchronizer reset reset synchronizer cdc metastability asynchronous assertion"
+}

@@ -32,9 +32,9 @@ class QueryPlanOutput(BaseModel):
 class SkillContext:
     name: str
     path: Path
-    module_info: dict[str, Any]
-    readme: str
-    template: str
+    skill: dict[str, Any]
+    compact_card: dict[str, Any]
+    rtl_source: str
 
 
 @dataclass(frozen=True)
@@ -82,18 +82,22 @@ def call_skill_retriever_tool(plan: QueryPlan, skills_root: Path, limit: int) ->
 
 def load_skill_context(result: dict[str, Any]) -> SkillContext:
     skill_path = Path(result["path"])
-    module_info_path = skill_path / "module_info.json"
-    readme_path = skill_path / "README.md"
-    template_path = skill_path / "template.v"
-    missing = [path for path in (module_info_path, readme_path, template_path) if not path.exists()]
+    skill_json_path = skill_path / "skill.json"
+    compact_card_path = skill_path / "compact_card.json"
+    missing = [path for path in (skill_json_path, compact_card_path) if not path.exists()]
     if missing:
         raise RuntimeError(f"selected skill is incomplete: {', '.join(str(path) for path in missing)}")
+    skill_json = json.loads(skill_json_path.read_text(encoding="utf-8"))
+    rtl_files = [str(item) for item in skill_json.get("rtl_files", [])]
+    rtl_path = next((skill_path / item for item in rtl_files if (skill_path / item).exists()), None)
+    if rtl_path is None:
+        raise RuntimeError(f"selected skill has no readable RTL file: {skill_json_path}")
     return SkillContext(
         name=str(result["name"]),
         path=skill_path,
-        module_info=json.loads(module_info_path.read_text(encoding="utf-8")),
-        readme=readme_path.read_text(encoding="utf-8"),
-        template=template_path.read_text(encoding="utf-8"),
+        skill=skill_json,
+        compact_card=json.loads(compact_card_path.read_text(encoding="utf-8")),
+        rtl_source=rtl_path.read_text(encoding="utf-8"),
     )
 
 
@@ -104,7 +108,7 @@ def generate_hdl(user_request: str, plan: QueryPlan, skill: SkillContext, llm: C
                 "role": "system",
                 "content": (
                     "You are an RTL generator. Produce synthesizable Verilog/SystemVerilog code only. "
-                    "Use the selected skill metadata, usage guide, and template as the implementation basis. "
+                    "Use the selected skill JSON, compact retrieval card, and RTL source as the implementation basis. "
                     "Do not include Markdown fences or explanatory prose."
                 ),
             },
@@ -114,9 +118,9 @@ def generate_hdl(user_request: str, plan: QueryPlan, skill: SkillContext, llm: C
                     f"Human HDL request:\n{user_request}\n\n"
                     f"Query plan:\n{json.dumps(plan.to_dict(), indent=2)}\n\n"
                     f"Selected skill: {skill.name}\n\n"
-                    f"module_info.json:\n{json.dumps(skill.module_info, indent=2)}\n\n"
-                    f"README.md:\n{skill.readme}\n\n"
-                    f"template.v:\n{skill.template}\n"
+                    f"skill.json:\n{json.dumps(skill.skill, indent=2)}\n\n"
+                    f"compact_card.json:\n{json.dumps(skill.compact_card, indent=2)}\n\n"
+                    f"RTL source:\n{skill.rtl_source}\n"
                 ),
             },
         ],
@@ -149,8 +153,9 @@ def repair_hdl(
                     f"Human HDL request:\n{user_request}\n\n"
                     f"Query plan:\n{json.dumps(plan.to_dict(), indent=2)}\n\n"
                     f"Selected skill: {skill.name}\n\n"
-                    f"module_info.json:\n{json.dumps(skill.module_info, indent=2)}\n\n"
-                    f"template.v:\n{skill.template}\n\n"
+                    f"skill.json:\n{json.dumps(skill.skill, indent=2)}\n\n"
+                    f"compact_card.json:\n{json.dumps(skill.compact_card, indent=2)}\n\n"
+                    f"RTL source:\n{skill.rtl_source}\n\n"
                     f"iverilog failure log:\n{syntax_log}\n\n"
                     f"Broken HDL:\n{broken_hdl}\n"
                 ),

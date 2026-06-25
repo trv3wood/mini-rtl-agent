@@ -13,13 +13,13 @@ SKILLROUTER_STATUS_MD ?= work/reports/skillrouter_status.md
 SKILLROUTER_STATUS_JSON ?= work/reports/skillrouter_status.json
 
 skills:
-	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m src.rtl_skill_index --run-examples
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m src.skill_builder.validate_minimal_skills $(SKILLS_ROOT)
 
 architecture-demo:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m architecture "Design a UART receiver with FIFO buffering" --output-dir work/architecture
 
 skill-builder-demo:
-	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m skill_builder build work/sample_rtl_repo --output work/built_skills
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m skill_builder build work/sample_rtl_repo --output work/built_skills --clean
 
 router-benchmark:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m skill_retriever benchmark $(ROUTER_BENCHMARK) --skills-root $(SKILLS_ROOT) --limit 10

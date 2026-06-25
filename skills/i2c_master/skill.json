@@ -1,0 +1,31 @@
+{
+  "skill_id": "i2c_master",
+  "name": "i2c_master",
+  "granularity": "primitive",
+  "project": "freecores/i2c",
+  "core_function": "I2C master controller with software-visible command/status registers and open-drain SCL/SDA controls.",
+  "algorithm": "Keep register decode, byte controller, and bit controller as separate conceptual blocks. Use prescale registers to",
+  "interface": {
+    "input": "wishbone, i2c, open_drain",
+    "output": "wishbone, i2c, open_drain"
+  },
+  "structure": [
+    "Separate software register decode from byte-level and bit-level protocol controllers.",
+    "Model SCL/SDA as open-drain: drive low or release, never actively drive high.",
+    "Clear one-shot command bits when byte transfer completes or arbitration is lost.",
+    "Latch status bits such as rxack, transfer-in-progress, bus busy, and interrupt pending."
+  ],
+  "parameters": [
+    "ARST_LVL",
+    "DEFAULT_SLAVE_ADDR"
+  ],
+  "dependencies": [
+    "i2c_master_byte_ctrl",
+    "i2c_master_bit_ctrl",
+    "wishbone_reg_block"
+  ],
+  "used_by": [],
+  "rtl_files": [
+    "rtl/i2c_master.v"
+  ]
+}

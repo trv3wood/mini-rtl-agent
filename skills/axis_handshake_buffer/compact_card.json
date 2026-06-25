@@ -1,0 +1,28 @@
+{
+  "skill_id": "axis_handshake_buffer",
+  "name": "axis_handshake_buffer",
+  "core_function": "Ready/valid one-word skid or pipeline buffer for AXI-stream-like data paths.",
+  "algorithm": "Input transfers occur only when s_axis_tvalid and s_axis_tready are high on the same rising clock edge.",
+  "structure": [
+    "A transfer occurs only when valid and ready are both high on the same clock edge.",
+    "Hold tdata stable while tvalid is high and tready is low.",
+    "Compute input ready from output ready or buffer vacancy.",
+    "Use skid storage when downstream ready can deassert late."
+  ],
+  "interface_signature": "ready_valid, axis",
+  "granularity": "primitive",
+  "project": "alexforencich/verilog-axis",
+  "keywords": [
+    "axi stream",
+    "ready valid",
+    "skid buffer",
+    "pipeline",
+    "backpressure",
+    "tvalid",
+    "tready",
+    "ready_valid",
+    "axis",
+    "handshake"
+  ],
+  "retrieval_text": "Ready/valid one-word skid or pipeline buffer for AXI-stream-like data paths. Input transfers occur only when s_axis_tvalid and s_axis_tready are high on the same rising clock edge. A transfer occurs only when valid and ready are both high on the same"
+}
