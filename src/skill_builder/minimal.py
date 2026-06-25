@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import ModuleInfo, SkillCandidate
+from .semantic import make_compact_card_from_skill
 
 
 REQUIRED_SKILL_FIELDS = {
@@ -41,47 +42,51 @@ def build_minimal_skill_json(
     candidate: SkillCandidate,
     repo_path: Path,
     rtl_files: list[str],
+    semantic_skill: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    if semantic_skill is None:
+        semantic_skill = {}
+
+    skill_json: dict[str, Any] = {
         "skill_id": candidate.skill_id,
         "name": module.name,
-        "granularity": granularity(candidate),
+        "granularity": semantic_skill.get("granularity", granularity(candidate)),
         "project": repo_path.name,
-        "core_function": short_text(module.functional_summary or fallback_core_function(module), 18),
-        "algorithm": short_text(module.behavior_summary or fallback_algorithm(module), 16),
-        "interface": interface_json(module),
-        "structure": compact_list(module.patterns or module.states or ["rtl module"], 4),
-        "parameters": [parameter.name for parameter in module.parameters],
+        "core_function": semantic_skill.get(
+            "core_function",
+            short_text(fallback_core_function(module), 18),
+        ),
+        "algorithm": semantic_skill.get(
+            "algorithm",
+            short_text(fallback_algorithm(module), 16),
+        ),
+        "interface": semantic_skill.get(
+            "interface",
+            interface_json(module),
+        ),
+        "structure": compact_list(
+            semantic_skill.get(
+                "structure",
+                module.patterns or module.states or ["rtl module"],
+            ),
+            4,
+        ),
+        "parameters": [param.name for param in module.parameters],
         "dependencies": candidate.dependency_modules,
         "used_by": [],
         "rtl_files": rtl_files,
     }
 
+    keywords = semantic_skill.get("keywords", [])
+    if not keywords:
+        keywords = keyword_candidates(module, skill_json)
+    skill_json["keywords"] = compact_list(keywords, 10)
 
-def build_compact_card(skill: dict[str, Any], module: ModuleInfo) -> dict[str, Any]:
-    keywords = compact_list(keyword_candidates(module, skill), 10)
-    retrieval_text = " ".join(
-        part
-        for part in (
-            skill["core_function"],
-            skill["algorithm"],
-            " ".join(skill["structure"]),
-            " ".join(keywords),
-        )
-        if part
-    )
-    return {
-        "skill_id": skill["skill_id"],
-        "name": skill["name"],
-        "core_function": skill["core_function"],
-        "algorithm": skill["algorithm"],
-        "structure": skill["structure"][:4],
-        "interface_signature": interface_signature(skill["interface"]),
-        "granularity": skill["granularity"],
-        "project": skill["project"],
-        "keywords": keywords[:10],
-        "retrieval_text": short_text(retrieval_text, 40),
-    }
+    return skill_json
+
+
+def build_compact_card(skill_json: dict[str, Any]) -> dict[str, Any]:
+    return make_compact_card_from_skill(skill_json)
 
 
 def keyword_candidates(module: ModuleInfo, skill: dict[str, Any]) -> list[str]:
@@ -102,7 +107,7 @@ def validate_minimal_skill(skill: dict[str, Any]) -> list[str]:
     missing = REQUIRED_SKILL_FIELDS - skill.keys()
     if missing:
         errors.append(f"skill.json missing fields: {', '.join(sorted(missing))}")
-    extra = skill.keys() - REQUIRED_SKILL_FIELDS
+    extra = skill.keys() - REQUIRED_SKILL_FIELDS - {"keywords"}
     if extra:
         errors.append(f"skill.json unknown fields: {', '.join(sorted(extra))}")
     if skill.get("granularity") not in {"leaf", "primitive", "composite"}:

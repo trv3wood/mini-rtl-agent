@@ -4,7 +4,18 @@ import json
 from pathlib import Path
 
 from src.skill_builder.builder import build_skill_library
-from src.skill_builder.minimal import validate_compact_card, validate_minimal_skill
+from src.skill_builder.llm_client import (
+    AnnotationResult,
+    FallbackAnnotator,
+    SemanticAnnotation,
+    SkillAnnotator,
+)
+from src.skill_builder.minimal import (
+    build_compact_card,
+    build_minimal_skill_json,
+    validate_compact_card,
+    validate_minimal_skill,
+)
 from src.skill_builder.frontend import parse_project
 from src.skill_builder.hierarchy import (
     build_module_hierarchy,
@@ -13,6 +24,13 @@ from src.skill_builder.hierarchy import (
     module_dependency_graph,
 )
 from src.skill_builder.parser import parse_modules
+from src.skill_builder.semantic import (
+    annotate_module,
+    build_semantic_input,
+    make_compact_card_from_skill,
+    merge_deterministic_and_semantic,
+)
+from src.skill_builder.taxonomy import normalize_annotation
 from src.skill_builder.validate_minimal_skills import validate_library
 from src.skill_retriever.models import QueryPlan
 from src.skill_retriever.retriever import retrieve_skills
@@ -445,3 +463,386 @@ def test_clean_removes_previous_skill_directories(tmp_path: Path) -> None:
     assert not stale.exists()
     assert (output / "one" / "skill.json").exists()
     assert not (output / "one" / "module_info.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# Semantic annotation tests
+# ---------------------------------------------------------------------------
+
+
+class MockLLMAnnotator:
+    """Annotator that returns pre-defined semantic annotations for testing."""
+
+    def __init__(
+        self,
+        annotation: SemanticAnnotation | None = None,
+        backend: str = "mock",
+        should_fail: bool = False,
+    ) -> None:
+        self.annotation = annotation or SemanticAnnotation()
+        self.backend = backend
+        self.should_fail = should_fail
+
+    def annotate(self, semantic_input: dict) -> AnnotationResult:
+        if self.should_fail:
+            raise RuntimeError("mock LLM failure")
+        return AnnotationResult(
+            annotation=self.annotation,
+            backend=self.backend,
+            llm_used=True,
+            warnings=[],
+        )
+
+
+def _arbiter_annotation() -> SemanticAnnotation:
+    return SemanticAnnotation(
+        core_function="N-port configurable request arbitration",
+        algorithm="masked round-robin arbitration",
+        structure=["priority encoder", "rotating mask", "registered grant"],
+        interface_protocol="request-grant",
+        granularity="primitive",
+        keywords=[
+            "arbiter",
+            "round_robin",
+            "fixed_priority",
+            "mask",
+            "onehot_grant",
+            "request_acknowledge",
+        ],
+    )
+
+
+def _axis_adapter_annotation() -> SemanticAnnotation:
+    return SemanticAnnotation(
+        core_function="AXI-stream data width conversion",
+        algorithm="width adaptation with handshake alignment",
+        structure=["width converter", "handshake passthrough"],
+        interface_protocol="ready-valid",
+        granularity="primitive",
+        keywords=[
+            "axis",
+            "adapter",
+            "width_conversion",
+            "handshake",
+            "ready_valid",
+        ],
+    )
+
+
+def _mock_arbiter_module_ir(tmp_path: Path):
+    rtl = write(
+        tmp_path / "arbiter.v",
+        """
+module arbiter #(
+    parameter PORTS = 4,
+    parameter ARB_TYPE_ROUND_ROBIN = 0,
+    parameter ARB_BLOCK = 1,
+    parameter ARB_BLOCK_ACK = 1,
+    parameter ARB_LSB_HIGH_PRIORITY = 0
+) (
+    input wire clk,
+    input wire rst,
+    input wire [PORTS-1:0] request,
+    input wire [PORTS-1:0] acknowledge,
+    output wire [PORTS-1:0] grant,
+    output wire grant_valid,
+    output wire [$clog2(PORTS)-1:0] grant_encoded
+);
+    assign grant_valid = |request;
+endmodule
+""",
+    )
+    modules = parse_project([rtl])
+    hierarchy = build_module_hierarchy(modules)
+    candidate = compute_dependency_closure("arbiter", hierarchy)
+    return modules[0], candidate, hierarchy
+
+
+def _mock_axis_adapter_module_ir(tmp_path: Path):
+    rtl = write(
+        tmp_path / "axis_adapter.v",
+        """
+module axis_adapter #(
+    parameter S_DATA_WIDTH = 8,
+    parameter M_DATA_WIDTH = 16
+) (
+    input wire clk,
+    input wire rst,
+    input wire [S_DATA_WIDTH-1:0] s_axis_tdata,
+    input wire s_axis_tvalid,
+    output wire s_axis_tready,
+    output wire [M_DATA_WIDTH-1:0] m_axis_tdata,
+    output wire m_axis_tvalid,
+    input wire m_axis_tready
+);
+    assign s_axis_tready = m_axis_tready;
+    assign m_axis_tvalid = s_axis_tvalid;
+endmodule
+""",
+    )
+    modules = parse_project([rtl])
+    hierarchy = build_module_hierarchy(modules)
+    candidate = compute_dependency_closure("axis_adapter", hierarchy)
+    return modules[0], candidate, hierarchy
+
+
+class TestSemanticAnnotation:
+    def test_mock_llm_annotation_merges_into_skill_json(self, tmp_path: Path) -> None:
+        """Mock LLM returns semantic annotation → skill.json correctly merges deterministic + semantic."""
+        module_ir, candidate, hierarchy = _mock_arbiter_module_ir(tmp_path)
+        mock = MockLLMAnnotator(_arbiter_annotation())
+        ctx = annotate_module(module_ir, candidate, hierarchy, "test_project", mock)
+
+        skill_json = build_minimal_skill_json(
+            module_ir.to_module_info(),
+            candidate,
+            tmp_path,
+            ["rtl/arbiter.v"],
+            ctx.merged,
+        )
+
+        assert skill_json["core_function"] == "N-port configurable request arbitration"
+        assert skill_json["algorithm"] == "masked round-robin arbitration"
+        assert "priority_encoder" in skill_json["structure"]
+        assert ctx.result.llm_used is True
+
+    def test_deterministic_fields_not_overridden_by_llm(self, tmp_path: Path) -> None:
+        """LLM must NOT overwrite deterministic fields (name, parameters, dependencies, rtl_files)."""
+        module_ir, candidate, hierarchy = _mock_arbiter_module_ir(tmp_path)
+        mock = MockLLMAnnotator(_arbiter_annotation())
+        ctx = annotate_module(module_ir, candidate, hierarchy, "test_project", mock)
+
+        skill_json = build_minimal_skill_json(
+            module_ir.to_module_info(),
+            candidate,
+            tmp_path,
+            ["rtl/arbiter.v"],
+            ctx.merged,
+        )
+
+        assert skill_json["name"] == "arbiter"
+        assert "PORTS" in skill_json["parameters"]
+        assert "ARB_TYPE_ROUND_ROBIN" in skill_json["parameters"]
+        assert len(skill_json["parameters"]) == 5
+        assert skill_json["rtl_files"] == ["rtl/arbiter.v"]
+        assert skill_json["skill_id"] == "arbiter"
+
+    def test_llm_failure_triggers_fallback(self, tmp_path: Path) -> None:
+        """When LLM fails, fallback annotation is used and backend is marked 'fallback'."""
+        module_ir, candidate, hierarchy = _mock_arbiter_module_ir(tmp_path)
+        mock = MockLLMAnnotator(should_fail=True)
+        annotator = mock
+
+        try:
+            ctx = annotate_module(module_ir, candidate, hierarchy, "test_project", annotator)
+        except Exception:
+            ctx = annotate_module(module_ir, candidate, hierarchy, "test_project", None)
+
+        assert ctx.result.llm_used is False
+        assert ctx.result.backend == "fallback"
+
+    def test_compact_card_derived_from_skill_json_deterministically(self, tmp_path: Path) -> None:
+        """compact_card.json is deterministically derived from skill.json; no second LLM call."""
+        module_ir, candidate, hierarchy = _mock_axis_adapter_module_ir(tmp_path)
+        mock = MockLLMAnnotator(_axis_adapter_annotation())
+        ctx = annotate_module(module_ir, candidate, hierarchy, "test_project", mock)
+
+        skill_json = build_minimal_skill_json(
+            module_ir.to_module_info(),
+            candidate,
+            tmp_path,
+            ["rtl/axis_adapter.v"],
+            ctx.merged,
+        )
+        card = build_compact_card(skill_json)
+
+        assert card["core_function"] == skill_json["core_function"]
+        assert card["algorithm"] == skill_json["algorithm"]
+        assert card["structure"] == skill_json["structure"]
+        assert card["keywords"] == skill_json["keywords"]
+        assert card["granularity"] == skill_json["granularity"]
+        assert card["name"] == skill_json["name"]
+
+        assert validate_compact_card(card) == []
+
+    def test_retrieval_text_length_limit_still_passes(self, tmp_path: Path) -> None:
+        """Retrieval text must still be ≤ 60 words even with LLM-generated content."""
+        module_ir, candidate, hierarchy = _mock_arbiter_module_ir(tmp_path)
+        mock = MockLLMAnnotator(_arbiter_annotation())
+        ctx = annotate_module(module_ir, candidate, hierarchy, "test_project", mock)
+
+        skill_json = build_minimal_skill_json(
+            module_ir.to_module_info(),
+            candidate,
+            tmp_path,
+            ["rtl/arbiter.v"],
+            ctx.merged,
+        )
+        card = build_compact_card(skill_json)
+
+        word_count = len(card["retrieval_text"].split())
+        assert word_count <= 60, f"retrieval_text has {word_count} words, should be ≤ 60"
+
+    def test_keywords_normalized_and_truncated(self, tmp_path: Path) -> None:
+        """Taxonomy normalizes keywords (dedup, lowercase, underscorify) and truncates to 10."""
+        raw = SemanticAnnotation(
+            core_function="test",
+            algorithm="test",
+            structure=["a", "a", "b"],
+            interface_protocol="test",
+            granularity="primitive",
+            keywords=[
+                "Round Robin", "round-robin", "FIXED_PRIORITY",
+                "Fixed Priority", "ONEHOT", "SKID_BUFFER",
+                "Elastic Buffer", "elastic-buffer",
+            ],
+        )
+        result = normalize_annotation(raw)
+        norm = result.normalized
+        assert "round_robin" in norm.keywords
+        assert "fixed_priority" in norm.keywords
+        assert "elastic_buffer" in norm.keywords
+        assert norm.keywords.count("round_robin") == 1
+        assert len(norm.keywords) <= 10
+
+    def test_arbiter_mock_generates_correct_semantics(self, tmp_path: Path) -> None:
+        """Arbiter mock case: core_function has 'arbitration', algorithm has 'round-robin' or 'priority'."""
+        module_ir, candidate, hierarchy = _mock_arbiter_module_ir(tmp_path)
+        mock = MockLLMAnnotator(_arbiter_annotation())
+        ctx = annotate_module(module_ir, candidate, hierarchy, "test_project", mock)
+
+        skill_json = build_minimal_skill_json(
+            module_ir.to_module_info(),
+            candidate,
+            tmp_path,
+            ["rtl/arbiter.v"],
+            ctx.merged,
+        )
+
+        assert "arbitration" in skill_json["core_function"].lower()
+        assert "round" in skill_json["algorithm"].lower() or "priority" in skill_json["algorithm"].lower()
+        structure_text = " ".join(skill_json["structure"]).lower()
+        assert any(
+            term in structure_text
+            for term in ("priority", "encoder", "mask", "grant")
+        )
+
+    def test_axis_adapter_mock_generates_correct_semantics(self, tmp_path: Path) -> None:
+        """Axis adapter mock case: width conversion, handshake, AXI-stream."""
+        module_ir, candidate, hierarchy = _mock_axis_adapter_module_ir(tmp_path)
+        mock = MockLLMAnnotator(_axis_adapter_annotation())
+        ctx = annotate_module(module_ir, candidate, hierarchy, "test_project", mock)
+
+        skill_json = build_minimal_skill_json(
+            module_ir.to_module_info(),
+            candidate,
+            tmp_path,
+            ["rtl/axis_adapter.v"],
+            ctx.merged,
+        )
+
+        core_lower = skill_json["core_function"].lower()
+        alg_lower = skill_json["algorithm"].lower()
+        assert any(term in core_lower for term in ("width", "conversion", "adapter"))
+        assert any(term in alg_lower for term in ("width", "handshake", "adapt"))
+
+    def test_report_records_semantic_backend(self, tmp_path: Path) -> None:
+        """report.json includes 'semantic' section with backend and llm_used flags."""
+        repo = tmp_path / "repo"
+        write(
+            repo / "rtl" / "one.v",
+            "module one(input wire clk); assign done = 1'b1; endmodule\n",
+        )
+        output = tmp_path / "skills"
+        mock = MockLLMAnnotator(
+            SemanticAnnotation(
+                core_function="test module",
+                algorithm="test logic",
+                structure=["test"],
+                interface_protocol="parallel",
+                granularity="primitive",
+                keywords=["test"],
+            ),
+            backend="mock",
+        )
+        report = build_skill_library(repo, output, clean=True, annotator=mock)
+
+        assert "semantic" in report
+        assert report["semantic"]["backend"] == "mock"
+        assert report["semantic"]["llm_used"] is True
+        assert report["semantic"]["fallback_count"] == 0
+        assert report["semantic"]["total_modules"] == 1
+        assert len(report["semantic"]["per_module"]) == 1
+
+    def test_no_api_key_uses_fallback_in_tests(self, tmp_path: Path) -> None:
+        """When using FallbackAnnotator (no API key), backend is 'fallback' and llm_used=False."""
+        repo = tmp_path / "repo"
+        write(
+            repo / "rtl" / "fifo.v",
+            "module async_fifo(input wire wr_clk, rd_clk, rst); endmodule\n",
+        )
+        output = tmp_path / "skills"
+        fallback = FallbackAnnotator()
+        report = build_skill_library(repo, output, clean=True, annotator=fallback)
+
+        assert report["semantic"]["llm_used"] is False
+        assert report["semantic"]["backend"] == "fallback"
+        for skill in report["skills"]:
+            assert skill["granularity"] in {"leaf", "primitive", "composite"}
+            assert skill["keyword_count"] >= 0
+
+    def test_fallback_marked_with_low_confidence_in_report(self, tmp_path: Path) -> None:
+        """Fallback annotations are clearly marked in the report."""
+        repo = tmp_path / "repo"
+        write(
+            repo / "rtl" / "arb.v",
+            "module arbiter(input wire clk, rst, request, output wire grant); endmodule\n",
+        )
+        output = tmp_path / "skills"
+        report = build_skill_library(repo, output, clean=True)
+
+        assert report["semantic"]["backend"] == "fallback"
+        assert report["semantic"]["llm_used"] is False
+        assert report["semantic"]["fallback_count"] == report["semantic"]["total_modules"]
+
+
+class TestSemanticInputConstruction:
+    def test_semantic_input_contains_ports_parameters_deps(self, tmp_path: Path) -> None:
+        """build_semantic_input() captures ports, parameters, and dependencies from ModuleIR."""
+        module_ir, candidate, hierarchy = _mock_arbiter_module_ir(tmp_path)
+        inp = build_semantic_input(module_ir, candidate, hierarchy, "test_project")
+
+        assert inp.module == "arbiter"
+        assert inp.project == "test_project"
+        assert inp.candidate_kind == "standalone"
+        assert len(inp.parameters) == 5
+        assert len(inp.ports) == 7
+        assert inp.dependencies == []
+
+    def test_semantic_input_includes_structural_facts(self, tmp_path: Path) -> None:
+        """build_semantic_input() includes clock/reset candidates, always blocks, etc."""
+        module_ir, candidate, hierarchy = _mock_axis_adapter_module_ir(tmp_path)
+        inp = build_semantic_input(module_ir, candidate, hierarchy, "test_project")
+
+        assert "clk" in inp.structural_facts["clock_candidates"]
+        assert "rst" in inp.structural_facts["reset_candidates"]
+        assert inp.structural_facts["always_blocks"] >= 0
+        assert inp.structural_facts["continuous_assignments"] >= 0
+
+
+class TestMergeDeterministicSemantic:
+    def test_merge_does_not_let_llm_output_fields_it_should_not(self, tmp_path: Path) -> None:
+        """merge_deterministic_and_semantic only uses semantic fields, never lets LLM set name/skill_id/etc."""
+        module_ir, candidate, hierarchy = _mock_arbiter_module_ir(tmp_path)
+        annotation = _arbiter_annotation()
+
+        merged = merge_deterministic_and_semantic(module_ir, candidate, "test_project", annotation)
+
+        assert merged["name"] == "arbiter"
+        assert merged["skill_id"] == "arbiter"
+        assert merged["project"] == "test_project"
+        assert merged["parameters"] == [param.name for param in module_ir.parameters if param.kind == "parameter"]
+        assert merged["core_function"] == annotation.core_function
+        assert merged["algorithm"] == annotation.algorithm
+        assert merged["structure"] == annotation.structure
+        assert merged["granularity"] == annotation.granularity

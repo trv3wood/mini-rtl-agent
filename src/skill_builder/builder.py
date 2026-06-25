@@ -9,6 +9,7 @@ from .frontend import get_last_parse_warnings, parse_project
 from .hierarchy import build_module_hierarchy
 from .hierarchy import build_skill_candidates
 from .hierarchy import module_dependency_graph
+from .llm_client import AnnotationResult, SkillAnnotator, create_annotator
 from .minimal import (
     build_compact_card,
     build_minimal_skill_json,
@@ -18,6 +19,7 @@ from .minimal import (
 )
 from .models import ModuleIR, ModuleInfo, SkillCandidate
 from .scanner import scan_rtl_files
+from .semantic import annotate_module
 
 
 class SkillBuilderError(RuntimeError):
@@ -40,13 +42,14 @@ def write_minimal_skill(
     candidate: SkillCandidate,
     output_root: Path,
     repo_path: Path,
+    semantic_skill: dict | None = None,
 ) -> dict:
     skill_name = candidate.skill_id
     skill_dir = output_root / skill_name
     skill_dir.mkdir(parents=True, exist_ok=True)
     rtl_files = copy_minimal_rtl(candidate, skill_dir, repo_path)
-    skill_json = build_minimal_skill_json(module, candidate, repo_path, rtl_files)
-    card_json = build_compact_card(skill_json, module)
+    skill_json = build_minimal_skill_json(module, candidate, repo_path, rtl_files, semantic_skill)
+    card_json = build_compact_card(skill_json)
     schema_errors = validate_minimal_skill(skill_json) + validate_compact_card(card_json)
     if schema_errors:
         raise SkillBuilderError(f"generated minimal skill invalid for {module.name}: {schema_errors}")
@@ -74,6 +77,7 @@ def write_minimal_skill(
         },
         "retrieval_text_words": len(card_json["retrieval_text"].split()),
         "keyword_count": len(card_json["keywords"]),
+        "semantic_backend": semantic_skill.get("_semantic_backend", "fallback") if semantic_skill else "fallback",
     }
 
 
@@ -92,6 +96,7 @@ def build_skill_library(
     output_root: Path | None = None,
     clean: bool = False,
     candidate_mode: str = "all",
+    annotator: SkillAnnotator | None = None,
 ) -> dict:
     repo_path = repo_path.resolve()
     if not repo_path.exists() or not repo_path.is_dir():
@@ -102,6 +107,9 @@ def build_skill_library(
     output_root.mkdir(parents=True, exist_ok=True)
     if candidate_mode not in {"all", "roots"}:
         raise SkillBuilderError("candidate_mode must be 'all' or 'roots'")
+
+    if annotator is None:
+        annotator = create_annotator()
 
     rtl_files = scan_rtl_files(repo_path)
     module_irs = parse_project(rtl_files)
@@ -124,10 +132,52 @@ def build_skill_library(
         modules.append(module)
         module_candidate_pairs.append((module, module_ir, candidate))
 
-    skills = [
-        write_minimal_skill(module, candidate, output_root, repo_path)
-        for module, _module_ir, candidate in module_candidate_pairs
-    ]
+    project_name = repo_path.name
+
+    semantic_contexts: list[dict] = []
+    annotation_results: list[AnnotationResult] = []
+    semantic_backend = "fallback"
+    llm_used = False
+    fallback_count = 0
+    taxonomy_unmapped_terms = 0
+    total_taxonomy_warnings: list[str] = []
+
+    skills: list[dict] = []
+    for module, module_ir, candidate in module_candidate_pairs:
+        try:
+            ctx = annotate_module(module_ir, candidate, hierarchy, project_name, annotator)
+        except Exception as exc:
+            ctx = annotate_module(module_ir, candidate, hierarchy, project_name, annotator=None)
+            if not isinstance(ctx.result, AnnotationResult):
+                pass
+            ctx.result.warnings.append(f"annotation recovery after exception: {exc}")
+
+        annotation_results.append(ctx.result)
+        if ctx.result.backend != "fallback":
+            semantic_backend = ctx.result.backend
+        if ctx.result.llm_used:
+            llm_used = True
+        if ctx.result.backend == "fallback":
+            fallback_count += 1
+        taxonomy_unmapped_terms += len(ctx.taxonomy.unmapped_terms)
+        total_taxonomy_warnings.extend(ctx.taxonomy.warnings)
+
+        semantic_contexts.append({
+            "module": module.name,
+            "backend": ctx.result.backend,
+            "llm_used": ctx.result.llm_used,
+            "warnings": ctx.result.warnings,
+            "taxonomy_unmapped": ctx.taxonomy.unmapped_terms,
+            "taxonomy_warnings": ctx.taxonomy.warnings,
+        })
+
+        skill = write_minimal_skill(module, candidate, output_root, repo_path, ctx.merged)
+        skills.append(skill)
+
+    if fallback_count == len(module_candidate_pairs):
+        semantic_backend = "fallback"
+        llm_used = False
+
     backend_counts = {"pyslang": 0, "regex": 0}
     syntax_backend_counts: dict[str, int] = {}
     instance_backend_counts: dict[str, int] = {}
@@ -202,6 +252,15 @@ def build_skill_library(
         "verification": verification_counts,
         "quality_tiers": quality_tiers,
         "quality_gate_counts": quality_gate_counts,
+        "semantic": {
+            "backend": semantic_backend,
+            "llm_used": llm_used,
+            "fallback_count": fallback_count,
+            "total_modules": len(module_candidate_pairs),
+            "taxonomy_unmapped_terms": taxonomy_unmapped_terms,
+            "taxonomy_warnings": total_taxonomy_warnings[:20],
+            "per_module": semantic_contexts,
+        },
         "skills": skills,
     }
     (output_root / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
