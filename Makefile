@@ -1,4 +1,4 @@
-.PHONY: demo skills architecture-demo skill-builder-demo router-benchmark skillrouter-benchmark-dry-run skillrouter-report-existing skillrouter-status clean
+.PHONY: demo skills skill-builder-demo router-benchmark skillrouter-benchmark-dry-run skillrouter-report-existing skillrouter-status clean
 
 PYTHON ?= python3
 SKILLS_ROOT ?= skills
@@ -14,9 +14,6 @@ SKILLROUTER_STATUS_JSON ?= work/reports/skillrouter_status.json
 
 skills:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m src.skill_builder.validate_minimal_skills $(SKILLS_ROOT)
-
-architecture-demo:
-	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m architecture "Design a UART receiver with FIFO buffering" --output-dir work/architecture
 
 skill-builder-demo:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m skill_builder build work/sample_rtl_repo --output work/built_skills --clean
@@ -45,4 +42,4 @@ skillrouter-status:
 		--report-json $(SKILLROUTER_STATUS_JSON)
 
 clean:
-	rm -rf work/generated work/reports work/architecture work/built_skills
+	rm -rf work/generated work/reports work/built_skills

@@ -312,39 +312,6 @@ work/generated/agent_rtl.v
 
 The retriever remains deterministic. The LLM only rewrites the human request into a query plan and generates HDL from the selected skill's `skill.json`, `compact_card.json`, and RTL source. Generated HDL must pass `iverilog -g2012 -Wall`; on syntax failure the workflow feeds the compiler log back to the LLM and retries repair up to 3 times before failing.
 
-## Architecture Planner
-
-The Phase 2 architecture planner uses the configured LLM to decompose system-level hardware requirements into submodules, dependencies, Markdown specs, and Mermaid diagrams. The planner is not limited to a fixed set of local examples; structured output parsing and validation go through LangChain/Pydantic schemas while artifact generation remains testable.
-
-Run:
-
-```sh
-python3 -m architecture "Design a UART receiver with FIFO buffering"
-make architecture-demo
-```
-
-Default outputs:
-
-```text
-work/architecture/architecture.json
-work/architecture/architecture.md
-work/architecture/architecture.mmd
-work/architecture/specs/<submodule>.md
-```
-
-The output schema is:
-
-```json
-{
-  "top_module": "...",
-  "submodules": [],
-  "connections": [],
-  "notes": []
-}
-```
-
-The planner makes a second LLM call to map each LLM-produced submodule onto the current compact skill library.
-
 ## Automated RTL Skill Builder
 
 The builder converts a local Verilog/SystemVerilog repository into reusable skill packages. The default package format is minimal and does not call an LLM: it parses module structure deterministically, copies RTL, and writes only `skill.json` and `compact_card.json`.

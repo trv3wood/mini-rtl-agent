@@ -241,41 +241,12 @@ axis_handshake_buffer: one-word skid/simple ready-valid boundary
 
 `make skills` validates all 14 curated minimal skills and checks that only `skill.json`, `compact_card.json`, and `rtl/` are present in each skill directory.
 
-4. An Architecture Planner subsystem:
-   - CLI: `python3 -m architecture "<natural-language hardware requirement>"`.
-   - Source: `src/architecture/`.
-   - Uses the configured LLM to decompose arbitrary hardware requirements.
-   - No hardcoded architecture outputs; UART RX, 4-point FFT, and DMA are test/smoke examples rather than planner limits.
-   - LangChain/Pydantic structured output parsing checks the LLM JSON shape before artifact export.
-   - Outputs:
-
-```text
-work/architecture/architecture.json
-work/architecture/architecture.md
-work/architecture/architecture.mmd
-work/architecture/specs/<submodule>.md
-```
-
-The architecture schema is intentionally simple and downstream-friendly:
-
-```json
-{
-  "top_module": "...",
-  "submodules": [],
-  "connections": [],
-  "notes": []
-}
-```
-
-Each submodule is annotated by a second LLM call that maps nodes onto the current compact skill library.
-
 ## Hardening Added
 
 - Regression tests in `tests/test_skill_builder.py`.
 - Minimal package regression checks validate `skill.json`, `compact_card.json`, RTL paths, compact text length, and keyword limits.
 - Retriever tests cover compact-card retrieval text participation in recall/scoring and no-README retrieval.
 - LLM HDL agent tests in `tests/test_hdl_agent.py`.
-- Architecture planner tests in `tests/test_architecture.py`.
 - Golden-output tests against `work/sample_rtl_repo`.
 - External repo smoke wrapper:
 
@@ -293,7 +264,6 @@ Generated output paths are ignored by git:
 
 ```text
 work/generated/
-work/architecture/
 work/built_skills/
 work/external_skills/
 ```
@@ -304,12 +274,10 @@ The curated root `skills/` is not ignored, so changes there can be committed.
 
 ```sh
 make skill-builder-demo
-make architecture-demo
 PATH=/home/zys/mini-rtl-agent/.venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 pytest -q
 scripts/build_from_external_repo.sh work/sample_rtl_repo
 python3 -m hdl_agent --help
 iverilog -g2012 -Wall -o /tmp/agent_uart.vvp work/generated/agent_rtl.v
-python3 -m architecture "Design a 4-point FFT accelerator" --output-dir /tmp/arch_fft
 ```
 
 Latest pytest result:
@@ -338,19 +306,6 @@ wrote: work/generated/agent_rtl.v
 ```
 
 The generated `work/generated/agent_rtl.v` compiled with `iverilog -g2012 -Wall`.
-
-Latest architecture planner smoke examples:
-
-```text
-UART receiver with FIFO buffering:
-  submodules: UART_RX, Controller, FIFO
-4-point FFT accelerator:
-  submodules: FFT_Controller, Butterfly, Twiddle_ROM, Complex_Multiplier
-simple DMA engine:
-  submodules: DMA_Controller, Address_Generator, FIFO_Buffer, Bus_Arbiter
-```
-
-With LLM configuration available, `make architecture-demo` writes `architecture.json`, `architecture.md`, `architecture.mmd`, and submodule specs under `work/architecture/`.
 
 ## External SkillRouter Baseline
 
@@ -393,8 +348,6 @@ This is enough evidence for the report-level claim that SkillRouter's reranker i
 - The LLM HDL agent currently performs syntax checking only. It does not yet auto-run the selected skill's self-checking testbench against generated HDL.
 - HDL generation is strongly grounded by the selected skill template. This is useful for demo stability, but it means the output may look close to the template unless the request forces customization.
 - Real provider calls require a local `.env` or exported `LLM_*` variables. `.env` is ignored by git; `.env.example` is commit-safe.
-- Architecture planning and skill mapping now depend on LLM quality. The code validates structure and exports artifacts, but it does not guarantee stable decompositions or mappings across providers or prompts.
-- Architecture specs are intended as future RTL-generation inputs; no multi-module RTL orchestration is implemented yet.
 - External SkillRouter has been validated as an optional semantic retrieval/rerank baseline. The local side can now export SkillRouter-compatible JSONL pools, prepare a one-query external retrieval data root, call the external embedding retrieval entrypoint when explicitly requested, run an unlabeled local reranker helper over retrieved candidates, and fuse external retrieval/reranked JSON back into local ranking.
 
 ## Suggested Next Steps
@@ -429,7 +382,3 @@ This is enough evidence for the report-level claim that SkillRouter's reranker i
    - Add optional simulation with the selected skill testbench after syntax passes.
    - Write an agent trace artifact alongside `agent_rtl.v` for reports and demos.
 
-7. Extend the Architecture Planner:
-   - Strengthen the validation schema.
-   - Feed submodule specs into the existing HDL agent one module at a time.
-   - Add dependency-aware generation order for future multi-module RTL orchestration.

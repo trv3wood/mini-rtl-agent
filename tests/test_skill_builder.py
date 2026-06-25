@@ -3,15 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from src.skill_builder.builder import build_skill_library
 from src.skill_builder.minimal import validate_compact_card, validate_minimal_skill
-from src.skill_builder.models import ModuleInfo, SkillCandidate
 from src.skill_builder.frontend import parse_project
 from src.skill_builder.hierarchy import (
     build_module_hierarchy,
-    build_skill_candidates,
     compute_dependency_closure,
     mermaid_dependency_graph,
     module_dependency_graph,
