@@ -314,7 +314,7 @@ The retriever remains deterministic. The LLM only rewrites the human request int
 
 ## Automated RTL Skill Builder
 
-The builder converts a local Verilog/SystemVerilog repository into reusable skill packages. The default package format is minimal and does not call an LLM: it parses module structure deterministically, copies RTL, and writes only `skill.json` and `compact_card.json`.
+The builder converts a local Verilog/SystemVerilog repository into reusable skill packages. The package format is minimal: it writes only `skill.json`, `compact_card.json`, and copied RTL. Structural parsing and candidate filtering are deterministic; semantic annotation uses the shared `src/utils/llm.py` client when `LLM_*` is configured and falls back to local rules otherwise.
 
 ```sh
 python3 -m skill_builder build <repo_path>
@@ -336,7 +336,7 @@ python3 -m skill_builder build work/sample_rtl_repo \
 make skill-builder-demo
 ```
 
-In minimal mode the builder does not call an LLM, does not generate README/template/quality/evidence files, and the retriever can search the resulting `compact_card.json` files directly.
+In minimal mode the builder does not generate README/template/quality/evidence files, and the retriever can search the resulting `compact_card.json` files directly.
 
 Candidate selection defaults to compatibility mode, where every extracted module becomes a candidate. Use root-only mode to emit only root candidates:
 
@@ -350,8 +350,9 @@ Pipeline:
 - Ignores docs, images, build outputs, simulation outputs, and generated artifacts.
 - Extracts module names, parameters, ports, comments, likely FSM states, instances, and common patterns.
 - Builds `SkillCandidate` dependency closures from root/internal modules and classifies unresolved dependencies.
+- Applies conservative accepted-skill gates: no duplicate module definitions, self-contained atomic RTL only, at most 500 copied RTL lines, and at most one detected state-machine `case` over a state/fsm signal.
 - Writes minimal per-skill packages: `skill.json`, `compact_card.json`, and copied RTL under `rtl/`.
-- Writes `report.json` with frontend, candidate, dependency, and package summary fields.
+- Writes `report.json` with frontend, candidate, dependency, accepted-skill, and `rejected_candidates` summary fields. Rejected candidates do not stop the batch run.
 
 Try the included local sample:
 
@@ -359,13 +360,27 @@ Try the included local sample:
 make skill-builder-demo
 ```
 
-Run the external-repo smoke wrapper against a local checkout:
+External open-source RTL growth uses a staged workflow:
 
 ```sh
-scripts/build_from_external_repo.sh /path/to/verilog/repo
+git clone --depth 1 https://github.com/alexforencich/verilog-axis.git work/external_skills/verilog-axis
+git clone --depth 1 https://github.com/alexforencich/verilog-uart.git work/external_skills/verilog-uart
+git clone --depth 1 https://github.com/lowRISC/opentitan.git work/external_skills/opentitan
+git clone --depth 1 https://github.com/lowRISC/ibex.git work/external_skills/ibex
+
+scripts/smoke_external_skill_repos.sh
 ```
 
-The minimal builder copies RTL sources into each skill package.
+Raw upstream checkouts stay under ignored `work/external_skills/`; generated packages stay under ignored `work/built_skills/`. Review `work/built_skills/<repo>/report.json` and selected skill directories before promoting anything into commit-ready `skills/`. See `workflow.md` for the full smoke -> batch -> review -> promote policy.
+
+Latest external-library smoke/batch results with the atomic gates:
+
+| Repo | RTL files | Modules | Accepted skills | Rejected candidates |
+| --- | ---: | ---: | ---: | ---: |
+| `verilog-axis` | 85 | 31 | 20 | 11 |
+| `verilog-uart` | 30 | 28 | 2 | 26 |
+| `opentitan` primitives | 203 | 121 | 71 | 50 |
+| `ibex` | 640 | 209 | 88 | 121 |
 
 ### Known Limitations
 
@@ -375,6 +390,8 @@ The minimal builder copies RTL sources into each skill package.
 - Dependency closure quality depends on extracted instance edges; complex generate/package/interface constructs can still produce unresolved dependencies.
 - Extracted comments may be incomplete or may miss comments that are far from the module declaration.
 - The builder does not perform automatic verification in this phase; generated skills should be treated as compact retrieval/RTL packages, not quality-certified IP.
+- The "at most one FSM" gate is a lightweight static heuristic over `case(state/fsm...)`, not formal FSM analysis.
+- Large external checkouts live under `work/external_skills/`; pytest is configured to collect only this repository's `tests/` so third-party scripts are not imported during local test runs.
 
 ## Notes
 

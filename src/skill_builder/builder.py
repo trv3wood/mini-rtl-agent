@@ -18,6 +18,7 @@ from .minimal import (
     validate_minimal_skill,
 )
 from .models import ModuleIR, ModuleInfo, SkillCandidate
+from .quality_gate import evaluate_atomic_skill_candidate
 from .scanner import scan_rtl_files
 from .semantic import annotate_module
 
@@ -122,11 +123,30 @@ def build_skill_library(
     for module_ir in module_irs:
         parse_warnings.extend(module_ir.parse_warnings)
     module_lookup = {(module_ir.name, module_ir.source_file): module_ir for module_ir in module_irs}
+    modules_by_source = {module_ir.source_file: module_ir for module_ir in module_irs}
+    rejected_candidates: list[dict] = []
     for candidate in candidates:
         module_ir = module_lookup.get((candidate.root_module, candidate.root_source))
         if module_ir is None:
             module_ir = hierarchy.modules.get(candidate.root_module)
         if module_ir is None:
+            rejected_candidates.append({
+                "skill_id": candidate.skill_id,
+                "root_module": candidate.root_module,
+                "reasons": ["root module not found after parsing"],
+                "metrics": {},
+            })
+            continue
+        gate = evaluate_atomic_skill_candidate(candidate, modules_by_source)
+        if not gate.accepted:
+            rejected_candidates.append({
+                "skill_id": candidate.skill_id,
+                "root_module": candidate.root_module,
+                "source_files": candidate.source_files,
+                "candidate_kind": candidate.candidate_kind,
+                "reasons": gate.reasons,
+                "metrics": gate.metrics,
+            })
             continue
         module = module_ir.to_module_info()
         modules.append(module)
@@ -221,6 +241,7 @@ def build_skill_library(
         "rtl_files_scanned": len(rtl_files),
         "modules_extracted": len(module_irs),
         "skills_generated": len(skills),
+        "skills_rejected": len(rejected_candidates),
         "parse_errors": [{"warning": warning} for warning in sorted(set(parse_warnings))],
         "frontend": {
             "backend_counts": backend_counts,
@@ -241,6 +262,7 @@ def build_skill_library(
             "mermaid_closure": None,
         },
         "candidates": {"total": len(candidates), **candidate_counts},
+        "rejected_candidates": rejected_candidates,
         "dependencies": {
             "resolved": sum(len(candidate.dependency_modules) for candidate in candidates),
             "unresolved": sum(len(candidate.unresolved_dependencies) for candidate in candidates),

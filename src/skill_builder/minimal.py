@@ -142,9 +142,13 @@ def validate_compact_card(card: dict[str, Any]) -> list[str]:
 
 def copy_minimal_rtl(candidate: SkillCandidate, skill_dir: Path, repo_path: Path) -> list[str]:
     rtl_files = []
+    seen: set[str] = set()
     for source_file in candidate.source_files:
         source = Path(source_file)
         relative = minimal_rtl_relative(source_file, repo_path)
+        if relative in seen:
+            raise ValueError(f"duplicate RTL output path in skill package: {relative}")
+        seen.add(relative)
         destination = skill_dir / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
@@ -154,13 +158,7 @@ def copy_minimal_rtl(candidate: SkillCandidate, skill_dir: Path, repo_path: Path
 
 def minimal_rtl_relative(source_file: str, repo_path: Path) -> str:
     source = Path(source_file).resolve()
-    try:
-        relative = source.relative_to(repo_path.resolve())
-    except ValueError:
-        relative = Path(source.name)
-    if relative.parts and relative.parts[0] == "rtl":
-        relative = Path(*relative.parts[1:])
-    return f"rtl/{relative.as_posix()}"
+    return f"rtl/{source.name}"
 
 
 def granularity(candidate: SkillCandidate) -> str:

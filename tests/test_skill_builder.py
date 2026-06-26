@@ -8,7 +8,6 @@ from src.skill_builder.llm_client import (
     AnnotationResult,
     FallbackAnnotator,
     SemanticAnnotation,
-    SkillAnnotator,
 )
 from src.skill_builder.minimal import (
     build_compact_card,
@@ -445,6 +444,74 @@ endmodule
     )
     results = retrieve_skills(plan, output, limit=3)
     assert results[0].name == "axis_adapter"
+
+
+def test_builder_rejects_duplicate_modules_without_stopping(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    write(repo / "a" / "dup.v", "module dup(input wire clk); endmodule\n")
+    write(repo / "b" / "dup.v", "module dup(input wire clk); endmodule\n")
+    write(repo / "rtl" / "ok.v", "module ok(input wire clk); endmodule\n")
+
+    output = tmp_path / "skills"
+    report = build_skill_library(repo, output, clean=True)
+
+    assert report["skills_generated"] == 1
+    assert report["skills_rejected"] == 2
+    assert (output / "ok" / "skill.json").exists()
+    assert not any(path.name.startswith("dup") for path in output.iterdir() if path.is_dir())
+    assert all(
+        "duplicate module definition" in " ".join(item["reasons"])
+        for item in report["rejected_candidates"]
+        if item["root_module"] == "dup"
+    )
+
+
+def test_builder_rejects_large_non_atomic_skill(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    body = "\n".join(f"assign out = in; // {idx}" for idx in range(501))
+    write(
+        repo / "rtl" / "large.v",
+        f"""
+module large(input wire in, output wire out);
+{body}
+endmodule
+""",
+    )
+
+    report = build_skill_library(repo, tmp_path / "skills", clean=True)
+
+    assert report["skills_generated"] == 0
+    assert report["skills_rejected"] == 1
+    assert "RTL exceeds 500 lines" in report["rejected_candidates"][0]["reasons"]
+
+
+def test_builder_rejects_more_than_one_state_machine(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    write(
+        repo / "rtl" / "two_fsm.v",
+        """
+module two_fsm(input wire clk, input wire [1:0] state_a, state_b, output reg done);
+always @* begin
+    case (state_a)
+        2'd0: done = 1'b0;
+        default: done = 1'b1;
+    endcase
+end
+always @* begin
+    case (state_b)
+        2'd0: done = 1'b0;
+        default: done = 1'b1;
+    endcase
+end
+endmodule
+""",
+    )
+
+    report = build_skill_library(repo, tmp_path / "skills", clean=True)
+
+    assert report["skills_generated"] == 0
+    assert report["skills_rejected"] == 1
+    assert "contains more than one state machine" in report["rejected_candidates"][0]["reasons"]
 
 
 def test_committed_skills_follow_minimal_layout() -> None:

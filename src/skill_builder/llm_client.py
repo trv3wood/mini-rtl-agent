@@ -1,17 +1,11 @@
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass, field
+from dataclasses import field
 from typing import Any, Protocol
 
-from dotenv import load_dotenv
 from pydantic import BaseModel
 
-
-SKILL_BUILDER_LLM_ENV = "SKILL_BUILDER_LLM"
-SKILL_BUILDER_LLM_BASE_URL_ENV = "SKILL_BUILDER_LLM_BASE_URL"
-SKILL_BUILDER_LLM_API_KEY_ENV = "SKILL_BUILDER_LLM_API_KEY"
-SKILL_BUILDER_LLM_MODEL_ENV = "SKILL_BUILDER_LLM_MODEL"
+from src.utils.llm import ChatClient, LLMConfig, OpenAICompatibleLLM
 
 
 class SemanticAnnotation(BaseModel):
@@ -37,79 +31,19 @@ class SkillAnnotator(Protocol):
         ...
 
 
-@dataclass
-class SkillBuilderLLMConfig:
-    backend: str = "off"
-    base_url: str = ""
-    api_key: str = ""
-    model: str = ""
-
-    @classmethod
-    def from_env(cls) -> "SkillBuilderLLMConfig":
-        load_dotenv(".env")
-        backend = os.getenv(SKILL_BUILDER_LLM_ENV, "").strip().lower()
-        if not backend:
-            backend = "off"
-        return cls(
-            backend=backend,
-            base_url=os.getenv(SKILL_BUILDER_LLM_BASE_URL_ENV, "").strip(),
-            api_key=os.getenv(SKILL_BUILDER_LLM_API_KEY_ENV, "").strip(),
-            model=os.getenv(SKILL_BUILDER_LLM_MODEL_ENV, "").strip(),
-        )
-
-
-def create_annotator(config: SkillBuilderLLMConfig | None = None) -> SkillAnnotator:
-    if config is None:
-        config = SkillBuilderLLMConfig.from_env()
-    if config.backend == "off":
-        return FallbackAnnotator(config)
-    if config.backend == "openai_compatible":
-        return OpenAICompatibleAnnotator(config)
-    return FallbackAnnotator(config)
+def create_annotator(config: LLMConfig | None = None) -> SkillAnnotator:
+    try:
+        client = OpenAICompatibleLLM(config or LLMConfig.from_env())
+    except RuntimeError as exc:
+        return FallbackAnnotator(warnings=[f"semantic annotation using rule-based fallback: {exc}"])
+    return OpenAICompatibleAnnotator(client)
 
 
 class OpenAICompatibleAnnotator:
-    def __init__(self, config: SkillBuilderLLMConfig) -> None:
-        self.config = config
-        self._client: Any = None
-
-    def _ensure_client(self) -> Any:
-        if self._client is not None:
-            return self._client
-        from src.utils.llm import LLMConfig, OpenAICompatibleLLM
-
-        api_key = self.config.api_key or os.getenv("LLM_API_KEY", "")
-        base_url = self.config.base_url or os.getenv("LLM_BASE_URL", "")
-        model = self.config.model or os.getenv("LLM_MODEL", "")
-        timeout = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
-
-        if not api_key or not base_url:
-            raise RuntimeError(
-                "SKILL_BUILDER_LLM=openai_compatible requires "
-                "SKILL_BUILDER_LLM_BASE_URL + SKILL_BUILDER_LLM_API_KEY "
-                "or LLM_BASE_URL + LLM_API_KEY"
-            )
-
-        llm_config = LLMConfig(
-            api_key=api_key,
-            base_url=base_url,
-            model=model,
-            timeout_seconds=timeout,
-        )
-        self._client = OpenAICompatibleLLM(llm_config)
-        return self._client
+    def __init__(self, client: ChatClient) -> None:
+        self.client = client
 
     def annotate(self, semantic_input: dict[str, Any]) -> AnnotationResult:
-        try:
-            client = self._ensure_client()
-        except RuntimeError as exc:
-            return AnnotationResult(
-                annotation=_fallback_annotation(semantic_input),
-                backend="fallback",
-                llm_used=False,
-                warnings=[f"LLM client init failed: {exc}"],
-            )
-
         messages = [
             {"role": "system", "content": SEMANTIC_ANNOTATOR_SYSTEM_PROMPT},
             {
@@ -123,7 +57,7 @@ class OpenAICompatibleAnnotator:
         ]
 
         try:
-            result = client.complete_structured(messages, SemanticAnnotation, temperature=0.0)
+            result = self.client.complete_structured(messages, SemanticAnnotation, temperature=0.0)
             return AnnotationResult(
                 annotation=result,
                 backend="openai_compatible",
@@ -140,15 +74,15 @@ class OpenAICompatibleAnnotator:
 
 
 class FallbackAnnotator:
-    def __init__(self, config: SkillBuilderLLMConfig | None = None) -> None:
-        self.config = config or SkillBuilderLLMConfig.from_env()
+    def __init__(self, warnings: list[str] | None = None) -> None:
+        self.warnings = warnings or ["semantic annotation using rule-based fallback"]
 
     def annotate(self, semantic_input: dict[str, Any]) -> AnnotationResult:
         return AnnotationResult(
             annotation=_fallback_annotation(semantic_input),
             backend="fallback",
             llm_used=False,
-            warnings=["semantic annotation using rule-based fallback"],
+            warnings=list(self.warnings),
         )
 
 
