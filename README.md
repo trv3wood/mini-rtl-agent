@@ -257,7 +257,7 @@ Use `--max-cases 1` for a cheap smoke. Remove it when running a fuller LLM-backe
 
 ## HDL Agent Boundary
 
-The HDL agent demo still exists:
+The HDL agent is an end-to-end demo on top of the current `skills/` library. It is useful for checking whether a user request can be routed to a skill and customized into standalone RTL.
 
 ```sh
 .venv/bin/python -m hdl_agent \
@@ -271,7 +271,36 @@ It uses:
 user request -> query plan -> retriever -> selected skill context -> generated HDL -> iverilog syntax check
 ```
 
-Generated HDL is written under `work/generated/`. Syntax failures are fed back to the LLM for up to three repair attempts. This path is useful as an end-to-end demo, but it is not the main skill-builder/retriever evaluation surface.
+Generated HDL is written under `work/generated/`. The CLI prints the important actions as they happen:
+
+- build `query_plan.json` from the request
+- invoke the skill retriever tool
+- show retrieved skill candidates and scores
+- select the top skill
+- generate RTL from `skill.json`, `compact_card.json`, and source RTL
+- run `iverilog -g2012 -Wall`
+- feed compiler errors back to the LLM for up to three repair attempts
+- write the final RTL path
+
+Example IP customization request:
+
+```sh
+.venv/bin/python -m hdl_agent \
+  "Create IP named custom_priority8 that converts an 8-bit request vector into a valid flag and encoded winning index." \
+  --skills-root skills \
+  --output work/generated/custom_priority8.v \
+  --show-trace
+```
+
+For this case the agent routes to `skills/priority_encoder` and emits a standalone wrapper-style IP:
+
+- fixes `WIDTH=8`
+- fixes `LSB_HIGH_PRIORITY=0`, giving MSB priority
+- renames the user-facing ports to `req`, `valid`, and `win_idx`
+- hides the original one-hot output by leaving `output_unencoded` unconnected
+- keeps the reusable `priority_encoder` implementation in the generated file so it can compile by itself
+
+This path is still a demo surface, not a replacement for the builder/retriever evaluation. Current tests cover several customization targets from existing skills: UART TX, AXI-stream register slice, priority encoder, one-hot encoder, and reset synchronizer.
 
 ## External SkillRouter Boundary
 

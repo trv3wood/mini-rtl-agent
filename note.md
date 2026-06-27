@@ -32,7 +32,7 @@ work/built_skills/<skill_name>/
    - `skill.json` holds the compact structured metadata and RTL paths.
    - `compact_card.json` is the only retrieval input. It keeps `retrieval_text <= 60` words, `keywords <= 10`, and `structure <= 4`.
 
-The manually curated skills now live under `skills/` in minimal form and are intended to be committed.
+The curated skills now live under `skills/` in minimal form and are intended to be committed. The library currently contains 29 compact skills after promoting 15 representative generated skills from `work/built_skills/`.
 
 3. An LLM HDL Agent demo:
    - CLI: `python3 -m hdl_agent "<natural-language HDL request>" --show-trace`.
@@ -43,6 +43,7 @@ The manually curated skills now live under `skills/` in minimal form and are int
      - `LLM_BASE_URL`
      - `LLM_MODEL`
      - `LLM_TIMEOUT_SECONDS`
+   - The CLI prints readable action logs for query planning, retrieval, skill selection, RTL generation, syntax checking, repair attempts, and output writing.
    - The workflow is:
 
 ```text
@@ -63,6 +64,26 @@ work/generated/agent_rtl.v
 ```
 
 The retriever remains deterministic. The LLM is used for query-plan rewriting, HDL generation, and syntax-error repair only; it does not directly choose the final skill outside the ranked retriever result.
+
+The HDL agent is now also covered as a small IP-customization workflow over `skills/`, not only a UART demo. Added tests target RTL that can be customized from existing skills:
+
+```text
+uart_tx -> custom_uart_tx8
+axis_register -> custom_axis_reg32
+priority_encoder -> custom_priority8
+prim_onehot_enc -> custom_onehot8
+reset_synchronizer -> custom_reset_sync3
+```
+
+Each case verifies structured query-plan IO, deterministic top-skill selection, skill-context prompting, generated RTL writeout, no Markdown fences, and `iverilog` syntax acceptance. A real-LLM smoke exists behind `RUN_LIVE_LLM_IP_CUSTOMIZATION=1`.
+
+Latest inspected real/demo output:
+
+```text
+work/generated/custom_priority8.v
+```
+
+Compared with `skills/priority_encoder`, the generated `custom_priority8` fixes `WIDTH=8`, fixes `LSB_HIGH_PRIORITY=0` for MSB priority, exposes a smaller application-facing interface (`req`, `valid`, `win_idx`), leaves the original one-hot output unconnected, and keeps the reusable `priority_encoder` implementation in the same file for standalone compilation.
 
 4. A compact-card skill retriever:
    - Main CLI commands:
@@ -126,14 +147,19 @@ axis_pipeline_fifo: register-slice/pipeline FIFO for timing closure and controll
 axis_handshake_buffer: one-word skid/simple ready-valid boundary
 ```
 
-`make skills` validates all 14 curated minimal skills and checks that only `skill.json`, `compact_card.json`, and `rtl/` are present in each skill directory.
+The minimal skill validator covers all 29 curated skills and checks that only `skill.json`, `compact_card.json`, and `rtl/` are present in each skill directory. In this workspace the reliable invocation is:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m src.skill_builder.validate_minimal_skills skills
+```
 
 ## Hardening Added
 
 - Regression tests in `tests/test_skill_builder.py`.
 - Minimal package regression checks validate `skill.json`, `compact_card.json`, RTL paths, compact text length, and keyword limits.
 - Retriever tests cover compact-card retrieval text participation in recall/scoring and no-README retrieval.
-- LLM HDL agent tests in `tests/test_hdl_agent.py`.
+- LLM HDL agent tests in `tests/test_hdl_agent.py`, including key-action logging.
+- HDL agent IP-customization tests in `tests/test_hdl_agent_ip_customization.py`.
 - Golden-output tests against `work/sample_rtl_repo`.
 - External repo staging workflow:
 
@@ -156,7 +182,7 @@ work/built_skills/
 work/external_skills/
 ```
 
-The curated root `skills/` is not ignored, so changes there can be committed.
+The curated root `skills/` is not ignored, so changes there can be committed. It currently has 29 compact-card skills.
 
 Accepted-skill gates now enforce the current project policy:
 
@@ -181,6 +207,7 @@ The `verilog-uart` batch now keeps only `uart_rx` and `uart_tx`; repeated board-
 
 ```sh
 make skill-builder-demo
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m src.skill_builder.validate_minimal_skills skills
 PATH=/home/zys/mini-rtl-agent/.venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 pytest -q
 python3 -m skill_retriever search /tmp/query_plan_uart.json --skills-root skills --limit 3
 python3 -m skill_retriever benchmark benchmarks/router_benchmark.json --skills-root skills --limit 10
@@ -189,22 +216,24 @@ python3 -m skill_retriever benchmark benchmarks/router_benchmark.json --skills-r
 scripts/smoke_external_skill_repos.sh verilog-uart
 python3 -m hdl_agent --help
 iverilog -g2012 -Wall -o /tmp/agent_uart.vvp work/generated/agent_rtl.v
+.venv/bin/python -m hdl_agent "Create IP named custom_priority8 that converts an 8-bit request vector into a valid flag and encoded winning index." --skills-root skills --output work/generated/custom_priority8.v --show-trace
+iverilog -g2012 -Wall -o /tmp/custom_priority8.vvp work/generated/custom_priority8.v
+.venv/bin/python -m pytest -q tests/test_hdl_agent.py tests/test_hdl_agent_ip_customization.py
 ```
 
 Latest pytest result:
 
 ```text
-91 passed
+97 passed, 1 skipped
 ```
 
 Latest compact router benchmark:
 
 ```text
 hit@1=1.000
-avg_text_length=38.9
+avg_text_length=35.1
 keyword_match_rate=1.000
-json_size_reduction=76.0%
-retrieval_text_avg_reduction=95.8%
+compact_cards=29
 ```
 
 Latest real LLM skill retriever smoke result:
@@ -226,6 +255,16 @@ wrote: work/generated/agent_rtl.v
 ```
 
 The generated `work/generated/agent_rtl.v` compiled with `iverilog -g2012 -Wall`.
+
+Latest HDL agent IP customization inspection:
+
+```text
+request: Create IP named custom_priority8 that converts an 8-bit request vector into a valid flag and encoded winning index.
+selected_skill: priority_encoder
+wrote: work/generated/custom_priority8.v
+syntax: iverilog -g2012 -Wall passed
+behavior smoke: req=8'b1000_0011 produced win_idx=7, so the generated wrapper uses MSB priority
+```
 
 ## External SkillRouter Baseline
 
