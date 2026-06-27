@@ -12,6 +12,15 @@ class FakeLLM:
         self.text_prompts: list[list[dict[str, str]]] = []
 
     def complete_structured(self, messages: list[dict[str, str]], schema, *, temperature: float = 0.0):
+        if "selected_skill" in schema.model_fields:
+            payload = {
+                "selected_skill": "uart_tx",
+                "selected_rank": 1,
+                "confidence": "high",
+                "reason": "UART transmitter request matches uart_tx.",
+                "rejected": [],
+            }
+            return schema.model_validate(payload)
         assert "UART" in messages[-1]["content"] or "uart" in messages[-1]["content"]
         payload = {
             "intent": "uart transmitter",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -21,7 +22,21 @@ STRUCTURED_FIELDS = (
 
 
 def normalize(text: str) -> str:
-    return text.lower().replace("_", " ")
+    return re.sub(r"[\s_-]+", " ", text.lower()).strip()
+
+
+def term_variants(term: str) -> list[str]:
+    stripped = term.strip()
+    if not stripped:
+        return []
+    normalized = normalize(stripped)
+    variants = {
+        stripped,
+        normalized,
+        normalized.replace(" ", "_"),
+        normalized.replace(" ", "-"),
+    }
+    return [variant for variant in variants if variant]
 
 
 def flatten(value: Any) -> list[str]:
@@ -51,34 +66,36 @@ def rg_matching_module_infos(skills_root: Path, positive_terms: list[str]) -> se
         return matched
     rg = shutil.which("rg")
     for term in positive_terms:
-        term = term.strip()
-        if not term:
+        variants = term_variants(term)
+        if not variants:
             continue
         if rg:
-            run = subprocess.run(
-                [
-                    rg,
-                    "-i",
-                    "-l",
-                    "--glob",
-                    "compact_card.json",
-                    term,
-                    str(skills_root),
-                ],
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
-            for line in run.stdout.splitlines():
-                path = Path(line)
-                if path.name == "compact_card.json":
-                    matched.add(path)
+            for variant in variants:
+                run = subprocess.run(
+                    [
+                        rg,
+                        "-F",
+                        "-i",
+                        "-l",
+                        "--glob",
+                        "compact_card.json",
+                        variant,
+                        str(skills_root),
+                    ],
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+                for line in run.stdout.splitlines():
+                    path = Path(line)
+                    if path.name == "compact_card.json":
+                        matched.add(path)
         else:
-            needle = normalize(term)
+            needles = [normalize(variant) for variant in variants]
             for path in skills_root.rglob("compact_card.json"):
-                text = path.read_text(encoding="utf-8", errors="ignore")
-                if needle not in normalize(text):
+                text = normalize(path.read_text(encoding="utf-8", errors="ignore"))
+                if not any(needle in text for needle in needles):
                     continue
                 matched.add(path)
     if not matched:

@@ -274,6 +274,16 @@ class IPCustomizationLLM:
         self.text_prompts: list[list[dict[str, str]]] = []
 
     def complete_structured(self, messages: list[dict[str, str]], schema, *, temperature: float = 0.0):
+        if "selected_skill" in schema.model_fields:
+            return schema.model_validate(
+                {
+                    "selected_skill": self.case.expected_skill,
+                    "selected_rank": 1,
+                    "confidence": "high",
+                    "reason": f"{self.case.expected_skill} best matches the requested IP.",
+                    "rejected": [],
+                }
+            )
         assert self.case.request in messages[-1]["content"]
         return schema.model_validate(self.case.query_plan)
 
@@ -304,7 +314,7 @@ def test_hdl_agent_customizes_ip_from_existing_skills(case: IPCustomizationCase,
 
     generated = output.read_text(encoding="utf-8")
     assert result.selected_skill.name == case.expected_skill
-    assert result.retrieved["results"][0]["name"] == case.expected_skill
+    assert result.retrieved["skill_selection"]["selected_skill"] == case.expected_skill
     assert result.repair_attempts == 0
     assert f"module {case.expected_module}" in generated
     assert "```" not in generated
@@ -338,5 +348,6 @@ def test_live_llm_ip_customization_smoke(tmp_path: Path) -> None:
     )
 
     assert result.selected_skill.name == "priority_encoder"
+    assert result.retrieved["skill_selection"]["selected_skill"] == "priority_encoder"
     assert output.exists()
     assert "module" in output.read_text(encoding="utf-8")

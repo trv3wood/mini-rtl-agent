@@ -20,6 +20,7 @@ from src.hdl_agent.final_ip_context import (
     extract_final_rtl_facts,
     write_final_ip_context,
 )
+from src.hdl_agent.skill_selection import SkillSelectionDecision, select_skill_from_candidates
 from src.skill_retriever.models import QueryPlan
 from src.skill_retriever.planner import build_query_plan
 from src.skill_retriever.tools import retrieve_rtl_skills
@@ -30,6 +31,7 @@ from src.utils.llm import ChatClient, OpenAICompatibleLLM
 DEFAULT_SKILLS_ROOT = Path("skills")
 DEFAULT_OUTPUT = Path("work/generated/agent_rtl.v")
 DEFAULT_MAX_RETRIES = 3
+DEFAULT_RETRIEVER_LIMIT = 8
 LogFn = Callable[[str], None]
 
 
@@ -48,6 +50,7 @@ class HDLAgentResult:
     query_plan: QueryPlan
     retrieved: dict[str, Any]
     selected_skill: SkillContext
+    skill_selection: SkillSelectionDecision
     hdl_code: str
     output_path: Path
     syntax_log: str
@@ -85,6 +88,16 @@ def load_skill_context(result: dict[str, Any]) -> SkillContext:
         compact_card=json.loads(compact_card_path.read_text(encoding="utf-8")),
         rtl_source=rtl_path.read_text(encoding="utf-8"),
     )
+
+
+def enrich_candidate_with_compact_card(result: dict[str, Any]) -> dict[str, Any]:
+    enriched = dict(result)
+    compact_card_path = Path(str(result["path"])) / "compact_card.json"
+    if compact_card_path.exists():
+        enriched["compact_card"] = json.loads(compact_card_path.read_text(encoding="utf-8"))
+    else:
+        enriched["compact_card"] = {}
+    return enriched
 
 
 def generate_hdl(user_request: str, plan: QueryPlan, skill: SkillContext, llm: ChatClient) -> str:
@@ -234,7 +247,7 @@ def run_hdl_agent(
     skills_root: Path = DEFAULT_SKILLS_ROOT,
     output_path: Path = DEFAULT_OUTPUT,
     output_dir: Path | None = None,
-    limit: int = 3,
+    limit: int = DEFAULT_RETRIEVER_LIMIT,
     max_retries: int = DEFAULT_MAX_RETRIES,
     emit_spec: bool = False,
     emit_cpp_ref: bool = False,
@@ -277,14 +290,32 @@ def run_hdl_agent(
     results = retrieved.get("results", [])
     if not results:
         raise RuntimeError("skill retriever returned no results")
+    enriched_results = [enrich_candidate_with_compact_card(item) for item in results]
+    selection = select_skill_from_candidates(
+        user_request=user_request,
+        query_plan=plan,
+        candidates=enriched_results,
+        llm=active_llm,
+    )
+    retrieved["skill_selection"] = {
+        "selected_skill": selection.selected_skill,
+        "selected_rank": selection.selected_rank,
+        "confidence": selection.confidence,
+        "reason": selection.reason,
+        "rejected": selection.rejected,
+    }
     if output_dir is not None:
         retrieval_trace_path = output_dir / "retrieval_trace.json"
         retrieval_trace_path.write_text(json.dumps(retrieved, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         emit(f"[retriever] wrote {retrieval_trace_path}")
     ranked = ", ".join(f"{item['name']}({item['score']})" for item in results[: min(5, len(results))])
     emit(f"[hdl-agent] retrieved {len(results)} skill candidate(s): {ranked}")
-    selected_skill = load_skill_context(results[0])
-    emit(f"[retriever] selected {selected_skill.path} score={results[0].get('score', 0)}")
+    selected_result = enriched_results[selection.selected_rank - 1]
+    selected_skill = load_skill_context(selected_result)
+    emit(
+        "[selector] selected "
+        f"{selected_skill.path} rank={selection.selected_rank} confidence={selection.confidence}: {selection.reason}"
+    )
     try:
         hdl_code, syntax_log, repair_attempts = generate_verified_hdl(
             user_request,
@@ -336,7 +367,7 @@ def run_hdl_agent(
             selected_skill_record = {
                 "skill_id": selected_skill.name,
                 "skill_dir": str(selected_skill.path),
-                "score": results[0].get("score", 0),
+                "score": selected_result.get("score", 0),
                 "name": selected_skill.name,
                 "compact_card": selected_skill.compact_card,
             }
@@ -414,6 +445,7 @@ def run_hdl_agent(
         query_plan=plan,
         retrieved=retrieved,
         selected_skill=selected_skill,
+        skill_selection=selection,
         hdl_code=hdl_code,
         output_path=output_path,
         syntax_log=syntax_log,

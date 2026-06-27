@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from .workflow import DEFAULT_MAX_RETRIES, DEFAULT_OUTPUT, DEFAULT_SKILLS_ROOT, run_hdl_agent
+from .workflow import DEFAULT_MAX_RETRIES, DEFAULT_OUTPUT, DEFAULT_RETRIEVER_LIMIT, DEFAULT_SKILLS_ROOT, run_hdl_agent
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -16,7 +16,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--skills-root", default=str(DEFAULT_SKILLS_ROOT), help="Skill library root.")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Generated HDL output path.")
     parser.add_argument("--output-dir", help="Write a self-contained HDL agent artifact directory.")
-    parser.add_argument("--limit", type=int, default=3, help="Retriever result limit.")
+    parser.add_argument("--limit", type=int, default=DEFAULT_RETRIEVER_LIMIT, help="Retriever top-k candidate limit.")
     parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES, help="Maximum syntax-repair retries.")
     parser.add_argument("--emit-spec", action="store_true", help="Emit final_ip_context.json and engineer_spec.json.")
     parser.add_argument("--emit-cpp-ref", action="store_true", help="Emit cpp_model.json and generated C++17 reference files.")
@@ -55,6 +55,8 @@ def main(argv: list[str] | None = None) -> int:
         print("retrieved:")
         for index, item in enumerate(result.retrieved["results"], start=1):
             print(f"{index}. {item['name']} score={item['score']} path={item['path']}")
+        print("skill_selection:")
+        print(json.dumps(result.retrieved.get("skill_selection", {}), indent=2))
     print(f"selected_skill: {result.selected_skill.name}")
     print(f"syntax_check: passed repair_attempts={result.repair_attempts}")
     print(f"wrote: {result.output_path}")

@@ -268,7 +268,7 @@ The HDL agent is an end-to-end demo on top of the current `skills/` library. It 
 It uses:
 
 ```text
-user request -> query plan -> retriever -> selected skill context -> generated HDL -> iverilog syntax check
+user request -> query plan -> retriever top-k -> LLM skill selection -> selected skill context -> generated HDL -> iverilog syntax check
 ```
 
 Without artifact flags, generated HDL is written as a single file under `work/generated/`. With `--output-dir`, one run writes a self-contained artifact directory:
@@ -288,9 +288,9 @@ work/generated/<ip_name>/
 The CLI prints the important actions as they happen:
 
 - build `query_plan.json` from the request
-- invoke the skill retriever tool
+- invoke the skill retriever tool for a deterministic top-k candidate pool
 - show retrieved skill candidates and scores
-- select the top skill
+- ask the LLM to select one skill from the candidate pool only
 - generate RTL from `skill.json`, `compact_card.json`, and source RTL
 - run `iverilog -g2012 -Wall`
 - feed compiler errors back to the LLM for up to three repair attempts
@@ -323,6 +323,8 @@ For this case the agent routes to `skills/priority_encoder`, emits `custom_prior
 - asks the LLM for `cpp_model.json` before any C++ is generated
 - asks the LLM for C++17 files in a JSON file envelope
 - compiles and runs the generated C++ reference-model tests
+
+The default retriever candidate limit is `8`. This is intentional: the deterministic retriever is used as a fast coarse filter, while the LLM selector performs the final semantic choice inside the top-k pool. The selector is not allowed to choose a skill outside the returned candidates.
 
 This path is still a demo surface, not a replacement for the builder/retriever evaluation. Current tests cover several customization targets from existing skills: UART TX, AXI-stream register slice, priority encoder, one-hot encoder, and reset synchronizer.
 

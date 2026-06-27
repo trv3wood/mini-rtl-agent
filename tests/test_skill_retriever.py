@@ -260,6 +260,28 @@ def test_curated_axis_adapter_width_queries_rank_axis_adapter_first() -> None:
         assert results[0].name == "axis_adapter"
 
 
+def test_priority_encoder_space_separated_query_matches_underscore_skill() -> None:
+    plan = QueryPlan(
+        intent="Design a priority encoder for an 8-bit request vector that outputs a valid flag and encoded index.",
+        positive_terms=[
+            "priority encoder",
+            "8-bit request",
+            "valid flag",
+            "encoded index",
+            "combinational logic",
+        ],
+        negative_terms=[],
+        likely_categories=["priority encoder", "arbitration", "combinational logic"],
+        likely_interfaces=["input [7:0] request", "output valid", "output [2:0] index"],
+        required_features=["determine highest priority", "generate valid flag", "encode index"],
+    )
+
+    results = retrieve_skills(plan, Path("skills"), limit=5)
+
+    assert results[0].name == "priority_encoder"
+    assert any("priority encoder" in why for why in results[0].why_matched)
+
+
 def test_compact_card_retrieval_text_participates_in_recall_and_scoring(tmp_path: Path) -> None:
     skills_root = tmp_path / "skills"
     generic = skills_root / "generic_register"

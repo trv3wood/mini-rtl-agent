@@ -50,8 +50,9 @@ The curated skills now live under `skills/` in minimal form and are intended to 
 ```text
 human HDL request
   -> LLM rewrites request into query_plan.json
-  -> LangChain-registered retrieve_rtl_skills tool ranks skills deterministically
-  -> agent reads the top skill's skill.json, compact_card.json, and RTL source
+  -> LangChain-registered retrieve_rtl_skills tool returns deterministic top-k candidates
+  -> LLM selector chooses one skill from that candidate pool only
+  -> agent reads the selected skill's skill.json, compact_card.json, and RTL source
   -> LLM generates HDL
   -> iverilog -g2012 -Wall syntax check
   -> on syntax failure, compiler log + broken HDL are fed back for repair
@@ -84,6 +85,7 @@ work/generated/<ip_name>/
 ```
 
 The retriever remains deterministic. The LLM is used for query-plan rewriting, HDL generation, and syntax-error repair only; it does not directly choose the final skill outside the ranked retriever result.
+The HDL agent now uses a default retriever top-k of 8. The deterministic retriever is a coarse filter; an LLM selector makes the final semantic choice within that candidate pool and fails if it selects outside the pool or reports low confidence.
 
 The HDL agent is now also covered as a small IP-customization workflow over `skills/`, not only a UART demo. Added tests target RTL that can be customized from existing skills:
 
@@ -95,7 +97,7 @@ prim_onehot_enc -> custom_onehot8
 reset_synchronizer -> custom_reset_sync3
 ```
 
-Each case verifies structured query-plan IO, deterministic top-skill selection, skill-context prompting, generated RTL writeout, no Markdown fences, and `iverilog` syntax acceptance. Artifact tests additionally verify `final_ip_context.json`, `engineer_spec.json`, `cpp_model.json`, generated C++17 files, C++ build report, and C++ unit-test report. A real-LLM smoke exists behind `RUN_LIVE_LLM_IP_CUSTOMIZATION=1`.
+Each case verifies structured query-plan IO, deterministic top-k retrieval, LLM skill selection within the candidate pool, skill-context prompting, generated RTL writeout, no Markdown fences, and `iverilog` syntax acceptance. Artifact tests additionally verify `final_ip_context.json`, `engineer_spec.json`, `cpp_model.json`, generated C++17 files, C++ build report, and C++ unit-test report. A real-LLM smoke exists behind `RUN_LIVE_LLM_IP_CUSTOMIZATION=1`.
 
 Latest inspected real/demo output:
 

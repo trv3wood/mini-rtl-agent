@@ -14,6 +14,18 @@ class ArtifactFakeLLM:
     request = "Create IP named custom_priority8 that converts an 8-bit request vector into a valid flag and encoded winning index."
 
     def complete_structured(self, messages: list[dict[str, str]], schema, *, temperature: float = 0.0):
+        if "selected_skill" in schema.model_fields:
+            content = messages[-1]["content"]
+            selected_rank = 2 if "'name': 'prim_onehot_check'" in content and "'name': 'priority_encoder'" in content else 1
+            return schema.model_validate(
+                {
+                    "selected_skill": "priority_encoder",
+                    "selected_rank": selected_rank,
+                    "confidence": "high",
+                    "reason": "The priority_encoder candidate directly matches request-vector to encoded-index behavior.",
+                    "rejected": [],
+                }
+            )
         return schema.model_validate(
             {
                 "intent": "custom 8-bit priority encoder with valid flag and encoded index",
@@ -74,6 +86,7 @@ def test_hdl_agent_output_dir_emits_spec_cpp_and_reports(tmp_path: Path) -> None
     )
 
     assert result.selected_skill.name == "priority_encoder"
+    assert result.retrieved["skill_selection"]["selected_skill"] == "priority_encoder"
     assert result.output_path == output_dir / "custom_priority8.v"
 
     expected = [
@@ -116,7 +129,7 @@ def test_hdl_agent_output_dir_emits_spec_cpp_and_reports(tmp_path: Path) -> None
 
     trace = "\n".join(messages)
     assert "[plan] wrote" in trace
-    assert "[retriever] selected" in trace
+    assert "[selector] selected" in trace
     assert "[hdl] wrote" in trace
     assert "[context] wrote" in trace
     assert "[spec] wrote" in trace
@@ -162,6 +175,35 @@ def test_cpp_codegen_refuses_blocking_model_plan(tmp_path: Path) -> None:
             engineer_spec=_engineer_spec(),
             output_cpp_dir=tmp_path / "cpp",
         )
+
+
+def test_hdl_agent_uses_llm_selection_instead_of_top1(monkeypatch, tmp_path: Path) -> None:
+    if not shutil.which("iverilog"):
+        pytest.skip("iverilog is required")
+
+    def fake_retriever(_plan, _skills_root, _limit):
+        return {
+            "query_plan": {},
+            "results": [
+                {"name": "prim_onehot_check", "path": "skills/prim_onehot_check", "score": 14},
+                {"name": "priority_encoder", "path": "skills/priority_encoder", "score": 13},
+            ],
+        }
+
+    monkeypatch.setattr("src.hdl_agent.workflow.call_skill_retriever_tool", fake_retriever)
+    output = tmp_path / "custom_priority8.v"
+
+    result = run_hdl_agent(
+        ArtifactFakeLLM.request,
+        llm=ArtifactFakeLLM(),
+        skills_root=Path("skills"),
+        output_path=output,
+        limit=8,
+    )
+
+    assert result.retrieved["results"][0]["name"] == "prim_onehot_check"
+    assert result.selected_skill.name == "priority_encoder"
+    assert result.retrieved["skill_selection"]["selected_rank"] == 2
 
 
 def _rtl() -> str:

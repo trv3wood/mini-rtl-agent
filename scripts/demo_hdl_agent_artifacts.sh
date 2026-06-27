@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 PYTHON_BIN="${PYTHON:-.venv/bin/python}"
 OUTPUT_DIR="${OUTPUT_DIR:-work/generated/custom_priority8}"
 REQUEST="${REQUEST:-Create IP named custom_priority8 that converts an 8-bit request vector into a valid flag and encoded winning index.}"
+LIMIT="${LIMIT:-8}"
 
 log() {
   printf '[demo] %s\n' "$*"
@@ -54,6 +55,7 @@ log "running HDL agent artifact flow"
   "$REQUEST" \
   --skills-root skills \
   --output-dir "$OUTPUT_DIR" \
+  --limit "$LIMIT" \
   --emit-spec \
   --emit-cpp-ref \
   --build-cpp-ref \
