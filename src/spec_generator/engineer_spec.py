@@ -17,16 +17,17 @@ def build_engineer_spec_prompt(
                 "Use final_ip_context as terminal truth for module name, ports, parameters, and syntax status. "
                 "Return valid JSON only. Do not include Markdown. Do not include evidence, provenance, tool_runs, "
                 "SystemVerilog, UVM, or source code. Do not invent missing semantics; put uncertainty in "
-                "assumptions_and_constraints.unknowns."
+                "assumptions_and_constraints.unknowns. Keep the JSON concise: each prose string should be short, "
+                "arrays should usually contain 1-3 items, and avoid repeating the same fact in multiple fields."
             ),
         },
         {
             "role": "user",
             "content": (
                 "Generate engineer_spec.v1 with exactly this JSON shape. Replace placeholder strings/lists "
-                "with values for the final generated IP:\n"
-                f"{json.dumps(_engineer_spec_skeleton(), indent=2)}\n\n"
-                f"final_ip_context:\n{json.dumps(final_ip_context, indent=2)}"
+                "with concise values for the final generated IP:\n"
+                f"{json.dumps(_engineer_spec_skeleton(), separators=(',', ':'))}\n\n"
+                f"final_ip_context:\n{json.dumps(final_ip_context, separators=(',', ':'))}"
             ),
         },
     ]

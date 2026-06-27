@@ -31,8 +31,8 @@ def build_cpp_codegen_prompt(
         {
             "role": "user",
             "content": (
-                f"cpp_model.v1:\n{json.dumps(cpp_model_plan, indent=2)}\n\n"
-                f"engineer_spec.v1:\n{json.dumps(engineer_spec, indent=2)}"
+                f"cpp_model.v1:\n{json.dumps(cpp_model_plan, separators=(',', ':'))}\n\n"
+                f"engineer_spec.v1:\n{json.dumps(engineer_spec, separators=(',', ':'))}"
             ),
         },
     ]

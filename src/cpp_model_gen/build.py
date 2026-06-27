@@ -72,7 +72,7 @@ def run_cpp_reference_tests(
             "stdout": "",
             "stderr": "C++ reference test executable does not exist",
         }
-    command = [str(exe)]
+    command = ["./ref_test"]
     run = subprocess.run(
         command,
         cwd=cpp_dir,

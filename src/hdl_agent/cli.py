@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import random
 from pathlib import Path
 
 from .workflow import DEFAULT_MAX_RETRIES, DEFAULT_OUTPUT, DEFAULT_RETRIEVER_LIMIT, DEFAULT_SKILLS_ROOT, run_hdl_agent
+from src.utils.llm import OpenAICompatibleLLM
+from src.utils.llm_recording import LLMReplayConfig, RecordingReplayLLM
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -27,12 +31,37 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Allow C++ generation even when cpp_model.json records blocking unknowns/conflicts.",
     )
+    parser.add_argument("--record-llm", help="Append LLM calls and raw responses to a JSONL file.")
+    parser.add_argument("--replay-llm", help="Replay LLM raw responses from a JSONL file and forbid network calls.")
+    parser.add_argument("--demo-freeze", action="store_true", help="Make demo output more stable for recordings.")
+    parser.add_argument("--no-color", action="store_true", help="Disable ANSI color for terminal recordings.")
     parser.add_argument("--show-trace", action="store_true", help="Print query plan and ranked skill names.")
     args = parser.parse_args(argv)
 
+    if args.demo_freeze:
+        random.seed(0)
+        os.environ.setdefault("PYTHONHASHSEED", "0")
+    if args.no_color:
+        os.environ["NO_COLOR"] = "1"
+    if args.record_llm and args.replay_llm:
+        print("ERROR: --record-llm and --replay-llm are mutually exclusive")
+        return 1
+
     try:
+        llm = None
+        if args.record_llm or args.replay_llm:
+            inner = None if args.replay_llm else OpenAICompatibleLLM()
+            llm = RecordingReplayLLM(
+                inner,
+                LLMReplayConfig(
+                    record_path=Path(args.record_llm) if args.record_llm else None,
+                    replay_path=Path(args.replay_llm) if args.replay_llm else None,
+                    demo_freeze=args.demo_freeze,
+                ),
+            )
         result = run_hdl_agent(
             args.request,
+            llm=llm,
             skills_root=Path(args.skills_root),
             output_path=Path(args.output),
             output_dir=Path(args.output_dir) if args.output_dir else None,

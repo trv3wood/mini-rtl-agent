@@ -4,9 +4,11 @@ import json
 from pathlib import Path
 
 from src.skill_builder.builder import build_skill_library
+from src.skill_builder.cli import main as skill_builder_main
 from src.skill_builder.llm_client import (
     AnnotationResult,
     FallbackAnnotator,
+    OpenAICompatibleAnnotator,
     SemanticAnnotation,
 )
 from src.skill_builder.minimal import (
@@ -33,12 +35,28 @@ from src.skill_builder.taxonomy import normalize_annotation
 from src.skill_builder.validate_minimal_skills import validate_library
 from src.skill_retriever.models import QueryPlan
 from src.skill_retriever.retriever import retrieve_skills
+from src.utils.llm_recording import LLMReplayConfig, RecordingReplayLLM
 
 
 def write(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
     return path
+
+
+class SemanticFakeLLM:
+    def complete_text(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> str:
+        return json.dumps({
+            "core_function": "test semantic annotation",
+            "algorithm": "combinational pass through",
+            "structure": ["combinational_logic"],
+            "interface_protocol": "plain_ports",
+            "granularity": "primitive",
+            "keywords": ["demo", "semantic"],
+        })
+
+    def complete_structured(self, messages: list[dict[str, str]], schema, *, temperature: float = 0.0):
+        return schema.model_validate_json(self.complete_text(messages, temperature=temperature))
 
 
 def test_parse_simple_ansi_module(tmp_path: Path) -> None:
@@ -871,6 +889,69 @@ class TestSemanticAnnotation:
         assert report["semantic"]["backend"] == "fallback"
         assert report["semantic"]["llm_used"] is False
         assert report["semantic"]["fallback_count"] == report["semantic"]["total_modules"]
+
+    def test_cli_replays_recorded_semantic_annotations(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        write(
+            repo / "rtl" / "one.v",
+            "module one(input wire req, output wire grant); assign grant = req; endmodule\n",
+        )
+        record_path = tmp_path / "semantic.jsonl"
+        recording_annotator = OpenAICompatibleAnnotator(
+            RecordingReplayLLM(
+                SemanticFakeLLM(),
+                LLMReplayConfig(record_path=record_path, demo_freeze=True),
+            )
+        )
+        build_skill_library(repo, tmp_path / "recorded", clean=True, annotator=recording_annotator)
+
+        output = tmp_path / "replayed"
+        rc = skill_builder_main([
+            "build",
+            str(repo),
+            "--output",
+            str(output),
+            "--clean",
+            "--replay-llm",
+            str(record_path),
+            "--demo-freeze",
+            "--no-color",
+        ])
+
+        report = json.loads((output / "report.json").read_text())
+        assert rc == 0
+        assert report["semantic"]["backend"] == "openai_compatible"
+        assert report["semantic"]["llm_used"] is True
+        assert report["semantic"]["fallback_count"] == 0
+
+    def test_replay_prompt_mismatch_is_not_silently_fallback(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        write(
+            repo / "rtl" / "one.v",
+            "module one(input wire req, output wire grant); assign grant = req; endmodule\n",
+        )
+        record_path = tmp_path / "semantic.jsonl"
+        recording_annotator = OpenAICompatibleAnnotator(
+            RecordingReplayLLM(
+                SemanticFakeLLM(),
+                LLMReplayConfig(record_path=record_path, demo_freeze=True),
+            )
+        )
+        build_skill_library(repo, tmp_path / "recorded", clean=True, annotator=recording_annotator)
+        records = [json.loads(line) for line in record_path.read_text().splitlines()]
+        records[0]["prompt_hash"] = "0" * 64
+        record_path.write_text("\n".join(json.dumps(record) for record in records) + "\n")
+        rc = skill_builder_main([
+            "build",
+            str(repo),
+            "--output",
+            str(tmp_path / "mismatch"),
+            "--clean",
+            "--replay-llm",
+            str(record_path),
+        ])
+
+        assert rc == 1
 
 
 class TestSemanticInputConstruction:

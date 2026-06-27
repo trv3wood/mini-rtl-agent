@@ -8,6 +8,9 @@ PYTHON_BIN="${PYTHON:-.venv/bin/python}"
 OUTPUT_DIR="${OUTPUT_DIR:-work/generated/custom_priority8}"
 REQUEST="${REQUEST:-Create IP named custom_priority8 that converts an 8-bit request vector into a valid flag and encoded winning index.}"
 LIMIT="${LIMIT:-8}"
+RECORD_LLM="${RECORD_LLM:-}"
+REPLAY_LLM="${REPLAY_LLM:-}"
+export LLM_TIMEOUT_SECONDS="${LLM_TIMEOUT_SECONDS:-180}"
 
 log() {
   printf '[demo] %s\n' "$*"
@@ -31,8 +34,16 @@ if ! command -v g++ >/dev/null 2>&1 && ! command -v clang++ >/dev/null 2>&1; the
   die "missing required C++ compiler: install g++ or clang++"
 fi
 
-log "checking LLM configuration"
-"$PYTHON_BIN" - <<'PY'
+if [ -n "$RECORD_LLM" ] && [ -n "$REPLAY_LLM" ]; then
+  die "set only one of RECORD_LLM or REPLAY_LLM"
+fi
+
+if [ -n "$REPLAY_LLM" ]; then
+  [ -f "$REPLAY_LLM" ] || die "missing replay file: $REPLAY_LLM"
+  log "using LLM replay: $REPLAY_LLM"
+else
+  log "checking LLM configuration"
+  "$PYTHON_BIN" - <<'PY'
 from src.utils.llm import LLMConfig
 
 try:
@@ -45,12 +56,23 @@ except RuntimeError as exc:
 
 print(f"[demo] LLM_BASE_URL={config.base_url}")
 print(f"[demo] LLM_MODEL={config.model}")
+print(f"[demo] LLM_TIMEOUT_SECONDS={config.timeout_seconds:g}")
 PY
+fi
 
 log "cleaning output dir: $OUTPUT_DIR"
 rm -rf "$OUTPUT_DIR"
 
 log "running HDL agent artifact flow"
+llm_args=(--demo-freeze --no-color)
+if [ -n "$RECORD_LLM" ]; then
+  mkdir -p "$(dirname "$RECORD_LLM")"
+  rm -f "$RECORD_LLM"
+  llm_args+=(--record-llm "$RECORD_LLM")
+fi
+if [ -n "$REPLAY_LLM" ]; then
+  llm_args+=(--replay-llm "$REPLAY_LLM")
+fi
 "$PYTHON_BIN" -m hdl_agent \
   "$REQUEST" \
   --skills-root skills \
@@ -60,6 +82,7 @@ log "running HDL agent artifact flow"
   --emit-cpp-ref \
   --build-cpp-ref \
   --run-cpp-ref-tests \
+  "${llm_args[@]}" \
   --show-trace
 
 log "checking expected artifacts"
@@ -88,24 +111,12 @@ PY
 
 [ -f "$RTL_PATH" ] || die "missing RTL from final_ip_context: $RTL_PATH"
 
-IP_NAME="$("$PYTHON_BIN" - <<'PY' "$OUTPUT_DIR/final_ip_context.json"
-import json
-import sys
-from pathlib import Path
-
-context = json.loads(Path(sys.argv[1]).read_text())
-print(context["final_rtl"]["module_name"])
-PY
-)"
-
-for rel in \
-  "cpp/${IP_NAME}_ref.h" \
-  "cpp/${IP_NAME}_ref.cpp" \
-  "cpp/test_${IP_NAME}_ref.cpp" \
-  cpp/CMakeLists.txt
-do
-  [ -f "$OUTPUT_DIR/$rel" ] || die "missing C++ artifact: $OUTPUT_DIR/$rel"
-done
+find "$OUTPUT_DIR/cpp" -maxdepth 1 -type f -name '*.h' | grep -q . || die "missing C++ header under $OUTPUT_DIR/cpp"
+find "$OUTPUT_DIR/cpp" -maxdepth 1 -type f -name '*_ref.cpp' ! -name 'test_*' | grep -q . || die "missing C++ reference source under $OUTPUT_DIR/cpp"
+find "$OUTPUT_DIR/cpp" -maxdepth 1 -type f -name 'test_*.cpp' | grep -q . || die "missing C++ test source under $OUTPUT_DIR/cpp"
+if [ ! -f "$OUTPUT_DIR/cpp/CMakeLists.txt" ] && [ ! -f "$OUTPUT_DIR/cpp/Makefile" ]; then
+  die "missing C++ build file under $OUTPUT_DIR/cpp"
+fi
 
 log "checking report status"
 "$PYTHON_BIN" - <<'PY' "$OUTPUT_DIR"

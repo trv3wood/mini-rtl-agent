@@ -18,3 +18,7 @@ wheels/
 work/built_skills/
 work/external_skills/
 work/reports/
+
+# Demo recordings and LLM replay caches
+demo/cache/
+demo/recordings/

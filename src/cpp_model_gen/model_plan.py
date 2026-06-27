@@ -18,7 +18,9 @@ def build_cpp_model_prompt(
                 "Use final_ip_context as terminal truth for module name, ports, parameters, and syntax status. "
                 "Use engineer_spec as the behavior contract. Return valid JSON only. Do not write C++ code. "
                 "Do not invent missing semantics; represent missing or conflicting semantics as unknowns/conflicts. "
-                "If semantics are blocking, set model_kind='unsupported' or add a blocking conflict."
+                "If semantics are blocking, set model_kind='unsupported' or add a blocking conflict. "
+                "Keep the JSON concise: short strings, compact arrays, and only directed test vectors needed "
+                "to demonstrate the behavior contract."
             ),
         },
         {
@@ -26,9 +28,9 @@ def build_cpp_model_prompt(
             "content": (
                 "Generate cpp_model.v1 with exactly this JSON shape. Replace placeholder strings/lists "
                 "with values for the final generated IP. Do not include C++ code here:\n"
-                f"{json.dumps(_cpp_model_skeleton(), indent=2)}\n\n"
-                f"final_ip_context:\n{json.dumps(final_ip_context, indent=2)}\n\n"
-                f"engineer_spec:\n{json.dumps(engineer_spec, indent=2)}"
+                f"{json.dumps(_cpp_model_skeleton(), separators=(',', ':'))}\n\n"
+                f"final_ip_context:\n{json.dumps(final_ip_context, separators=(',', ':'))}\n\n"
+                f"engineer_spec:\n{json.dumps(engineer_spec, separators=(',', ':'))}"
             ),
         },
     ]

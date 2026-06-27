@@ -65,6 +65,8 @@ class OpenAICompatibleAnnotator:
                 warnings=[],
             )
         except Exception as exc:
+            if _is_replay_failure(exc):
+                raise
             return AnnotationResult(
                 annotation=_fallback_annotation(semantic_input),
                 backend="fallback",
@@ -84,6 +86,11 @@ class FallbackAnnotator:
             llm_used=False,
             warnings=list(self.warnings),
         )
+
+
+def _is_replay_failure(exc: Exception) -> bool:
+    message = str(exc)
+    return "LLM replay" in message or "prompt changed" in message
 
 
 def _fallback_annotation(semantic_input: dict[str, Any]) -> SemanticAnnotation:

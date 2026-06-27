@@ -167,6 +167,8 @@ def build_skill_library(
         try:
             ctx = annotate_module(module_ir, candidate, hierarchy, project_name, annotator)
         except Exception as exc:
+            if _is_replay_failure(exc):
+                raise
             ctx = annotate_module(module_ir, candidate, hierarchy, project_name, annotator=None)
             if not isinstance(ctx.result, AnnotationResult):
                 pass
@@ -287,3 +289,8 @@ def build_skill_library(
     }
     (output_root / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
+
+
+def _is_replay_failure(exc: Exception) -> bool:
+    message = str(exc)
+    return "LLM replay" in message or "prompt changed" in message
