@@ -44,6 +44,7 @@ The curated skills now live under `skills/` in minimal form and are intended to 
      - `LLM_MODEL`
      - `LLM_TIMEOUT_SECONDS`
    - The CLI prints readable action logs for query planning, retrieval, skill selection, RTL generation, syntax checking, repair attempts, and output writing.
+   - New `--output-dir` mode writes a self-contained artifact directory for one run.
    - The workflow is:
 
 ```text
@@ -55,12 +56,31 @@ human HDL request
   -> iverilog -g2012 -Wall syntax check
   -> on syntax failure, compiler log + broken HDL are fed back for repair
   -> fail after 3 repair attempts
+  -> if requested, write final_ip_context.json
+  -> if requested, ask LLM for engineer_spec.json
+  -> if requested, ask LLM for cpp_model.json
+  -> if requested, ask LLM for C++17 reference files
+  -> if requested, build and run C++ reference model tests
 ```
 
 Default generated output:
 
 ```text
 work/generated/agent_rtl.v
+```
+
+Artifact-mode output:
+
+```text
+work/generated/<ip_name>/
+  query_plan.json
+  retrieval_trace.json
+  <ip_name>.v
+  final_ip_context.json
+  engineer_spec.json
+  cpp_model.json
+  cpp/
+  reports/
 ```
 
 The retriever remains deterministic. The LLM is used for query-plan rewriting, HDL generation, and syntax-error repair only; it does not directly choose the final skill outside the ranked retriever result.
@@ -75,7 +95,7 @@ prim_onehot_enc -> custom_onehot8
 reset_synchronizer -> custom_reset_sync3
 ```
 
-Each case verifies structured query-plan IO, deterministic top-skill selection, skill-context prompting, generated RTL writeout, no Markdown fences, and `iverilog` syntax acceptance. A real-LLM smoke exists behind `RUN_LIVE_LLM_IP_CUSTOMIZATION=1`.
+Each case verifies structured query-plan IO, deterministic top-skill selection, skill-context prompting, generated RTL writeout, no Markdown fences, and `iverilog` syntax acceptance. Artifact tests additionally verify `final_ip_context.json`, `engineer_spec.json`, `cpp_model.json`, generated C++17 files, C++ build report, and C++ unit-test report. A real-LLM smoke exists behind `RUN_LIVE_LLM_IP_CUSTOMIZATION=1`.
 
 Latest inspected real/demo output:
 
@@ -84,6 +104,8 @@ work/generated/custom_priority8.v
 ```
 
 Compared with `skills/priority_encoder`, the generated `custom_priority8` fixes `WIDTH=8`, fixes `LSB_HIGH_PRIORITY=0` for MSB priority, exposes a smaller application-facing interface (`req`, `valid`, `win_idx`), leaves the original one-hot output unconnected, and keeps the reusable `priority_encoder` implementation in the same file for standalone compilation.
+
+The new spec/C++ stages keep a strict boundary: deterministic code extracts final RTL facts only, while engineer spec, cpp model plan, and C++ file content come from the configured LLM and are schema/file-set validated before being written or built.
 
 4. A compact-card skill retriever:
    - Main CLI commands:
@@ -160,6 +182,7 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m src.skill_builder.validate_minimal
 - Retriever tests cover compact-card retrieval text participation in recall/scoring and no-README retrieval.
 - LLM HDL agent tests in `tests/test_hdl_agent.py`, including key-action logging.
 - HDL agent IP-customization tests in `tests/test_hdl_agent_ip_customization.py`.
+- HDL agent artifact tests in `tests/test_hdl_agent_artifacts.py` for `--output-dir`, final IP context, engineer spec, cpp model plan, generated C++17 files, build reports, test reports, blocking C++ codegen refusal, and RTL syntax-failure report writing.
 - Golden-output tests against `work/sample_rtl_repo`.
 - External repo staging workflow:
 
@@ -218,13 +241,14 @@ python3 -m hdl_agent --help
 iverilog -g2012 -Wall -o /tmp/agent_uart.vvp work/generated/agent_rtl.v
 .venv/bin/python -m hdl_agent "Create IP named custom_priority8 that converts an 8-bit request vector into a valid flag and encoded winning index." --skills-root skills --output work/generated/custom_priority8.v --show-trace
 iverilog -g2012 -Wall -o /tmp/custom_priority8.vvp work/generated/custom_priority8.v
-.venv/bin/python -m pytest -q tests/test_hdl_agent.py tests/test_hdl_agent_ip_customization.py
+.venv/bin/python -m hdl_agent "Create IP named custom_priority8 that converts an 8-bit request vector into a valid flag and encoded winning index." --skills-root skills --output-dir work/generated/custom_priority8 --emit-spec --emit-cpp-ref --build-cpp-ref --run-cpp-ref-tests --show-trace
+.venv/bin/python -m pytest -q tests/test_hdl_agent.py tests/test_hdl_agent_ip_customization.py tests/test_hdl_agent_artifacts.py
 ```
 
 Latest pytest result:
 
 ```text
-97 passed, 1 skipped
+100 passed, 1 skipped
 ```
 
 Latest compact router benchmark:

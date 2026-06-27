@@ -8,9 +8,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from src.cpp_model_gen.build import build_cpp_reference, run_cpp_reference_tests, write_report
+from src.cpp_model_gen.codegen import generate_cpp_files
+from src.cpp_model_gen.model_plan import (
+    generate_cpp_model_plan,
+    has_blocking_cpp_model_issue,
+    write_cpp_model_plan,
+)
+from src.hdl_agent.final_ip_context import (
+    build_final_ip_context,
+    extract_final_rtl_facts,
+    write_final_ip_context,
+)
 from src.skill_retriever.models import QueryPlan
 from src.skill_retriever.planner import build_query_plan
 from src.skill_retriever.tools import retrieve_rtl_skills
+from src.spec_generator.engineer_spec import generate_engineer_spec, write_engineer_spec
 from src.utils.llm import ChatClient, OpenAICompatibleLLM
 
 
@@ -39,6 +52,7 @@ class HDLAgentResult:
     output_path: Path
     syntax_log: str
     repair_attempts: int
+    artifact_paths: dict[str, Path]
 
 
 def call_skill_retriever_tool(plan: QueryPlan, skills_root: Path, limit: int) -> dict[str, Any]:
@@ -219,13 +233,28 @@ def run_hdl_agent(
     llm: ChatClient | None = None,
     skills_root: Path = DEFAULT_SKILLS_ROOT,
     output_path: Path = DEFAULT_OUTPUT,
+    output_dir: Path | None = None,
     limit: int = 3,
     max_retries: int = DEFAULT_MAX_RETRIES,
+    emit_spec: bool = False,
+    emit_cpp_ref: bool = False,
+    build_cpp_ref: bool = False,
+    run_cpp_ref_tests: bool = False,
+    allow_unsafe_cpp_gen: bool = False,
     log: LogFn | None = None,
 ) -> HDLAgentResult:
     emit = log or (lambda _message: None)
     emit("[hdl-agent] starting HDL generation workflow")
-    emit(f"[hdl-agent] skills_root={skills_root} output={output_path} limit={limit}")
+    if emit_cpp_ref:
+        emit_spec = True
+    if build_cpp_ref:
+        emit_cpp_ref = True
+        emit_spec = True
+    if run_cpp_ref_tests:
+        build_cpp_ref = True
+        emit_cpp_ref = True
+        emit_spec = True
+    emit(f"[hdl-agent] skills_root={skills_root} output={output_dir or output_path} limit={limit}")
     active_llm = llm or OpenAICompatibleLLM()
     emit("[hdl-agent] building query_plan from user request")
     plan = build_query_plan(user_request, active_llm)
@@ -233,26 +262,153 @@ def run_hdl_agent(
         "[hdl-agent] query_plan ready: "
         f"intent={plan.intent!r} positive_terms={plan.positive_terms}"
     )
+    query_plan_path: Path | None = None
+    retrieval_trace_path: Path | None = None
+    reports_dir: Path | None = None
+    if output_dir is not None:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        reports_dir = output_dir / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        query_plan_path = output_dir / "query_plan.json"
+        query_plan_path.write_text(json.dumps(plan.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        emit(f"[plan] wrote {query_plan_path}")
     emit("[hdl-agent] invoking skill retriever tool")
     retrieved = call_skill_retriever_tool(plan, skills_root, limit)
     results = retrieved.get("results", [])
     if not results:
         raise RuntimeError("skill retriever returned no results")
+    if output_dir is not None:
+        retrieval_trace_path = output_dir / "retrieval_trace.json"
+        retrieval_trace_path.write_text(json.dumps(retrieved, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        emit(f"[retriever] wrote {retrieval_trace_path}")
     ranked = ", ".join(f"{item['name']}({item['score']})" for item in results[: min(5, len(results))])
     emit(f"[hdl-agent] retrieved {len(results)} skill candidate(s): {ranked}")
     selected_skill = load_skill_context(results[0])
-    emit(f"[hdl-agent] selected skill: {selected_skill.name} path={selected_skill.path}")
-    hdl_code, syntax_log, repair_attempts = generate_verified_hdl(
-        user_request,
-        plan,
-        selected_skill,
-        active_llm,
-        max_retries=max_retries,
-        log=emit,
-    )
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(hdl_code, encoding="utf-8")
-    emit(f"[hdl-agent] wrote generated RTL: {output_path}")
+    emit(f"[retriever] selected {selected_skill.path} score={results[0].get('score', 0)}")
+    try:
+        hdl_code, syntax_log, repair_attempts = generate_verified_hdl(
+            user_request,
+            plan,
+            selected_skill,
+            active_llm,
+            max_retries=max_retries,
+            log=emit,
+        )
+    except RuntimeError as exc:
+        if output_dir is not None and reports_dir is not None:
+            write_report(
+                {
+                    "status": "failed",
+                    "command": ["iverilog", "-g2012", "-Wall"],
+                    "returncode": 1,
+                    "stdout": "",
+                    "stderr": str(exc),
+                },
+                reports_dir / "iverilog_check.json",
+            )
+        raise
+    artifact_paths: dict[str, Path] = {}
+    if output_dir is not None:
+        tmp_rtl = output_dir / "_final_rtl.v"
+        tmp_rtl.write_text(hdl_code, encoding="utf-8")
+        facts = extract_final_rtl_facts(tmp_rtl, syntax_check_status="passed")
+        output_path = output_dir / f"{facts.module_name}.v"
+        if output_path != tmp_rtl:
+            output_path.write_text(hdl_code, encoding="utf-8")
+            tmp_rtl.unlink(missing_ok=True)
+        facts = extract_final_rtl_facts(output_path, syntax_check_status="passed")
+        artifact_paths["rtl"] = output_path
+        emit(f"[hdl] wrote {output_path}")
+        if reports_dir is not None:
+            artifact_paths["iverilog_check"] = write_report(
+                {
+                    "status": "passed",
+                    "command": ["iverilog", "-g2012", "-Wall"],
+                    "returncode": 0,
+                    "stdout": syntax_log,
+                    "stderr": "",
+                    "repair_attempts": repair_attempts,
+                },
+                reports_dir / "iverilog_check.json",
+            )
+            emit("[check] iverilog passed")
+        if emit_spec:
+            selected_skill_record = {
+                "skill_id": selected_skill.name,
+                "skill_dir": str(selected_skill.path),
+                "score": results[0].get("score", 0),
+                "name": selected_skill.name,
+                "compact_card": selected_skill.compact_card,
+            }
+            final_context = build_final_ip_context(
+                request=user_request,
+                selected_skill=selected_skill_record,
+                final_rtl_facts=facts,
+                output_dir=output_dir,
+                query_plan_path=query_plan_path,
+                retrieval_trace_path=retrieval_trace_path,
+            )
+            context_path = write_final_ip_context(final_context, output_dir / "final_ip_context.json")
+            artifact_paths["final_ip_context"] = context_path
+            emit(f"[context] wrote {context_path}")
+            engineer_spec = generate_engineer_spec(llm_client=active_llm, final_ip_context=final_context)
+            spec_path = write_engineer_spec(engineer_spec, output_dir / "engineer_spec.json")
+            artifact_paths["engineer_spec"] = spec_path
+            emit(f"[spec] wrote {spec_path}")
+            if emit_cpp_ref:
+                cpp_model = generate_cpp_model_plan(
+                    llm_client=active_llm,
+                    final_ip_context=final_context,
+                    engineer_spec=engineer_spec,
+                )
+                cpp_model_path = write_cpp_model_plan(cpp_model, output_dir / "cpp_model.json")
+                artifact_paths["cpp_model"] = cpp_model_path
+                emit(f"[cpp-plan] wrote {cpp_model_path}")
+                blocking = has_blocking_cpp_model_issue(cpp_model)
+                if blocking and not allow_unsafe_cpp_gen:
+                    reason_report = {
+                        "status": "skipped",
+                        "reason": "blocking_unknown_or_conflict",
+                        "command": [],
+                        "returncode": None,
+                        "stdout": "",
+                        "stderr": "",
+                        "details": cpp_model.get("behavior_contract", {}).get("unknowns", []),
+                    }
+                    if reports_dir is not None:
+                        artifact_paths["cpp_build"] = write_report(reason_report, reports_dir / "cpp_build.json")
+                        artifact_paths["cpp_test"] = write_report(reason_report, reports_dir / "cpp_test.json")
+                    emit("[cpp-codegen] skipped: blocking unknown/conflict in cpp_model.json")
+                else:
+                    cpp_dir = output_dir / "cpp"
+                    cpp_files = generate_cpp_files(
+                        llm_client=active_llm,
+                        cpp_model_plan=cpp_model,
+                        engineer_spec=engineer_spec,
+                        output_cpp_dir=cpp_dir,
+                    )
+                    for path in cpp_files:
+                        emit(f"[cpp-codegen] wrote {path}")
+                    artifact_paths["cpp_dir"] = cpp_dir
+                    if build_cpp_ref:
+                        build_report = build_cpp_reference(cpp_dir=cpp_dir)
+                        if reports_dir is not None:
+                            artifact_paths["cpp_build"] = write_report(build_report, reports_dir / "cpp_build.json")
+                        emit(f"[cpp-build] {build_report['status']}")
+                        if build_report["status"] != "passed":
+                            raise RuntimeError(f"C++ reference model build failed:\n{build_report.get('stderr', '')}")
+                    if run_cpp_ref_tests:
+                        test_report = run_cpp_reference_tests(cpp_dir=cpp_dir)
+                        if reports_dir is not None:
+                            artifact_paths["cpp_test"] = write_report(test_report, reports_dir / "cpp_test.json")
+                        emit(f"[cpp-test] {test_report['status']}")
+                        if test_report["status"] != "passed":
+                            raise RuntimeError(f"C++ reference model tests failed:\n{test_report.get('stderr', '')}")
+    else:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(hdl_code, encoding="utf-8")
+        artifact_paths["rtl"] = output_path
+        emit(f"[hdl-agent] wrote generated RTL: {output_path}")
     return HDLAgentResult(
         user_request=user_request,
         query_plan=plan,
@@ -262,4 +418,5 @@ def run_hdl_agent(
         output_path=output_path,
         syntax_log=syntax_log,
         repair_attempts=repair_attempts,
+        artifact_paths=artifact_paths,
     )

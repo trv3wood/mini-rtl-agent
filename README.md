@@ -271,7 +271,21 @@ It uses:
 user request -> query plan -> retriever -> selected skill context -> generated HDL -> iverilog syntax check
 ```
 
-Generated HDL is written under `work/generated/`. The CLI prints the important actions as they happen:
+Without artifact flags, generated HDL is written as a single file under `work/generated/`. With `--output-dir`, one run writes a self-contained artifact directory:
+
+```text
+work/generated/<ip_name>/
+  query_plan.json
+  retrieval_trace.json
+  <ip_name>.v
+  final_ip_context.json
+  engineer_spec.json
+  cpp_model.json
+  cpp/
+  reports/
+```
+
+The CLI prints the important actions as they happen:
 
 - build `query_plan.json` from the request
 - invoke the skill retriever tool
@@ -281,6 +295,7 @@ Generated HDL is written under `work/generated/`. The CLI prints the important a
 - run `iverilog -g2012 -Wall`
 - feed compiler errors back to the LLM for up to three repair attempts
 - write the final RTL path
+- optionally write final IP context, engineer spec, C++ model plan, C++17 reference files, and build/test reports
 
 Example IP customization request:
 
@@ -288,17 +303,26 @@ Example IP customization request:
 .venv/bin/python -m hdl_agent \
   "Create IP named custom_priority8 that converts an 8-bit request vector into a valid flag and encoded winning index." \
   --skills-root skills \
-  --output work/generated/custom_priority8.v \
+  --output-dir work/generated/custom_priority8 \
+  --emit-spec \
+  --emit-cpp-ref \
+  --build-cpp-ref \
+  --run-cpp-ref-tests \
   --show-trace
 ```
 
-For this case the agent routes to `skills/priority_encoder` and emits a standalone wrapper-style IP:
+For this case the agent routes to `skills/priority_encoder`, emits `custom_priority8.v`, then generates terminal-state companion artifacts:
 
 - fixes `WIDTH=8`
 - fixes `LSB_HIGH_PRIORITY=0`, giving MSB priority
 - renames the user-facing ports to `req`, `valid`, and `win_idx`
 - hides the original one-hot output by leaving `output_unencoded` unconnected
 - keeps the reusable `priority_encoder` implementation in the generated file so it can compile by itself
+- writes `final_ip_context.json` from final RTL facts after syntax passes
+- asks the LLM for `engineer_spec.json`
+- asks the LLM for `cpp_model.json` before any C++ is generated
+- asks the LLM for C++17 files in a JSON file envelope
+- compiles and runs the generated C++ reference-model tests
 
 This path is still a demo surface, not a replacement for the builder/retriever evaluation. Current tests cover several customization targets from existing skills: UART TX, AXI-stream register slice, priority encoder, one-hot encoder, and reset synchronizer.
 
@@ -314,7 +338,7 @@ Run the repository tests:
 .venv/bin/python -m pytest -q
 ```
 
-The tests focus on structured IO, deterministic retrieval behavior, CLI output, LangChain tool import/invocation when installed, and builder package generation.
+The tests focus on structured IO, deterministic retrieval behavior, CLI output, LangChain tool import/invocation when installed, builder package generation, HDL agent artifact generation, and C++ reference model build/test reports.
 
 ## Known Limits
 
