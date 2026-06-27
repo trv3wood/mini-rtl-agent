@@ -1,0 +1,20 @@
+{
+  "algorithm": "Pipeline of N registers for synchronization",
+  "core_function": "Synchronizes active-high asynchronous reset signal to clock domain",
+  "granularity": "leaf",
+  "interface_signature": "clk, rst -> out",
+  "keywords": [
+    "reset_synchronizer",
+    "asynchronous_reset",
+    "synchronization",
+    "pipeline",
+    "registers"
+  ],
+  "name": "sync_reset",
+  "project": "rtl",
+  "retrieval_text": "Synchronizes active-high asynchronous reset signal to clock domain. Algorithm: Pipeline of N registers for synchronization. Structure: register_pipeline. Interface: clk, rst -> out.",
+  "skill_id": "sync_reset",
+  "structure": [
+    "register_pipeline"
+  ]
+}

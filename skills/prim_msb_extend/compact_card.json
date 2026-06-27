@@ -1,0 +1,19 @@
+{
+  "algorithm": "Sign extension via MSB replication",
+  "core_function": "Extends input width by replicating most significant bit to output",
+  "granularity": "leaf",
+  "interface_signature": "in_i -> out_o",
+  "keywords": [
+    "sign_extend",
+    "width_conversion",
+    "msb_replication",
+    "combinational"
+  ],
+  "name": "prim_msb_extend",
+  "project": "ip",
+  "retrieval_text": "Extends input width by replicating most significant bit to output. Algorithm: Sign extension via MSB replication. Structure: continuous_assignment. Interface: in_i -> out_o.",
+  "skill_id": "prim_msb_extend",
+  "structure": [
+    "continuous_assignment"
+  ]
+}

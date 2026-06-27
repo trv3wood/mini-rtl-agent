@@ -1,0 +1,21 @@
+{
+  "algorithm": "Explicit binary tree reduction with O(log N) delay and O(N) area",
+  "core_function": "Computes sum of parallel input values using explicit binary tree structure",
+  "granularity": "leaf",
+  "interface_signature": "clk_i, rst_ni, values_i, valid_i -> sum_value_o, sum_valid_o",
+  "keywords": [
+    "sum_tree",
+    "reduction",
+    "parallel_adder",
+    "binary_tree",
+    "low_latency"
+  ],
+  "name": "prim_sum_tree",
+  "project": "ip",
+  "retrieval_text": "Computes sum of parallel input values using explicit binary tree structure. Algorithm: Explicit binary tree reduction with O(log N) delay and O(N) area. Structure: binary_tree, combinational_logic. Interface: clk_i, rst_ni, values_i, valid_i -> sum_value_o, sum_valid_o.",
+  "skill_id": "prim_sum_tree",
+  "structure": [
+    "binary_tree",
+    "combinational_logic"
+  ]
+}

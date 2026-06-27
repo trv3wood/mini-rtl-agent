@@ -1,0 +1,30 @@
+{
+  "algorithm": "Sign extension via MSB replication",
+  "core_function": "Extends input width by replicating most significant bit to output",
+  "dependencies": [],
+  "granularity": "leaf",
+  "interface": {
+    "input": "in_i",
+    "output": "out_o"
+  },
+  "keywords": [
+    "sign_extend",
+    "width_conversion",
+    "msb_replication",
+    "combinational"
+  ],
+  "name": "prim_msb_extend",
+  "parameters": [
+    "InWidth",
+    "OutWidth"
+  ],
+  "project": "ip",
+  "rtl_files": [
+    "rtl/prim_msb_extend.sv"
+  ],
+  "skill_id": "prim_msb_extend",
+  "structure": [
+    "continuous_assignment"
+  ],
+  "used_by": []
+}

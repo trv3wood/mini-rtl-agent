@@ -1,0 +1,19 @@
+{
+  "algorithm": "combinational logic",
+  "core_function": "Validates one-hot encoded input vector and asserts error if invalid.",
+  "granularity": "leaf",
+  "interface_signature": "clk_i, rst_ni, oh_i, addr_i, en_i -> err_o",
+  "keywords": [
+    "onehot_check",
+    "validation",
+    "error_detection",
+    "combinational"
+  ],
+  "name": "prim_onehot_check",
+  "project": "ip",
+  "retrieval_text": "Validates one-hot encoded input vector and asserts error if invalid.. Algorithm: combinational logic. Structure: continuous_assignment. Interface: clk_i, rst_ni, oh_i, addr_i, en_i -> err_o.",
+  "skill_id": "prim_onehot_check",
+  "structure": [
+    "continuous_assignment"
+  ]
+}

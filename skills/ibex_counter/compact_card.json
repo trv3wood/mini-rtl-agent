@@ -1,0 +1,21 @@
+{
+  "algorithm": "increment on enable or parallel load via write signal",
+  "core_function": "64-bit counter with configurable width and separate write/update control",
+  "granularity": "leaf",
+  "interface_signature": "clk_i, rst_ni, counter_inc_i, counterh_we_i, counter_we_i, counter_val_i -> counter_val_o, counter_val_upd_o",
+  "keywords": [
+    "counter",
+    "increment",
+    "load",
+    "64_bit",
+    "configurable_width"
+  ],
+  "name": "ibex_counter",
+  "project": "rtl",
+  "retrieval_text": "64-bit counter with configurable width and separate write/update control. Algorithm: increment on enable or parallel load via write signal. Structure: registered_output, combinational_logic. Interface: clk_i, rst_ni, counter_inc_i, counterh_we_i, counter_we_i, counter_val_i -> counter_val_o, counter_val_upd_o.",
+  "skill_id": "ibex_counter",
+  "structure": [
+    "registered_output",
+    "combinational_logic"
+  ]
+}

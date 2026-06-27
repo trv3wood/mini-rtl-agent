@@ -1,0 +1,30 @@
+{
+  "algorithm": "Polynomial division with parallel bit processing and state update logic.",
+  "core_function": "Computes CRC32 checksum on input data words using polynomial division.",
+  "dependencies": [],
+  "granularity": "leaf",
+  "interface": {
+    "input": "clk_i, rst_ni, set_crc_i, crc_in_i, data_valid_i, data_i",
+    "output": "crc_out_o"
+  },
+  "keywords": [
+    "crc32",
+    "checksum",
+    "polynomial",
+    "parallel",
+    "registered",
+    "lowrisc"
+  ],
+  "name": "prim_crc32",
+  "parameters": [],
+  "project": "ip",
+  "rtl_files": [
+    "rtl/prim_crc32.sv"
+  ],
+  "skill_id": "prim_crc32",
+  "structure": [
+    "registered_crc_stages",
+    "combinational_logic"
+  ],
+  "used_by": []
+}

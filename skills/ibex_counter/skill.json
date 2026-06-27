@@ -1,0 +1,31 @@
+{
+  "algorithm": "increment on enable or parallel load via write signal",
+  "core_function": "64-bit counter with configurable width and separate write/update control",
+  "dependencies": [],
+  "granularity": "leaf",
+  "interface": {
+    "input": "clk_i, rst_ni, counter_inc_i, counterh_we_i, counter_we_i, counter_val_i",
+    "output": "counter_val_o, counter_val_upd_o"
+  },
+  "keywords": [
+    "counter",
+    "increment",
+    "load",
+    "64_bit",
+    "configurable_width"
+  ],
+  "name": "ibex_counter",
+  "parameters": [
+    "CounterWidth"
+  ],
+  "project": "rtl",
+  "rtl_files": [
+    "rtl/ibex_counter.sv"
+  ],
+  "skill_id": "ibex_counter",
+  "structure": [
+    "registered_output",
+    "combinational_logic"
+  ],
+  "used_by": []
+}

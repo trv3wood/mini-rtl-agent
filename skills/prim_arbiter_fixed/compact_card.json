@@ -1,0 +1,21 @@
+{
+  "algorithm": "priority_encoding",
+  "core_function": "Fixed priority arbiter selecting highest index request with data forwarding",
+  "granularity": "leaf",
+  "interface_signature": "clk_i, rst_ni, req_i, data_i, ready_i -> gnt_o, idx_o, valid_o, data_o",
+  "keywords": [
+    "arbiter",
+    "fixed_priority",
+    "round_robin",
+    "handshake",
+    "width_conversion"
+  ],
+  "name": "prim_arbiter_fixed",
+  "project": "ip",
+  "retrieval_text": "Fixed priority arbiter selecting highest index request with data forwarding. Algorithm: priority_encoding. Structure: priority_encoder, registered_grant. Interface: clk_i, rst_ni, req_i, data_i, ready_i -> gnt_o, idx_o, valid_o, data_o.",
+  "skill_id": "prim_arbiter_fixed",
+  "structure": [
+    "priority_encoder",
+    "registered_grant"
+  ]
+}

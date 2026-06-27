@@ -1,0 +1,23 @@
+{
+  "algorithm": "combinational selection using enable and select inputs to route data paths",
+  "core_function": "AXI4-Stream multiplexer selecting one of multiple input streams based on control signals",
+  "granularity": "leaf",
+  "interface_signature": "clk, rst, s_axis_tdata, s_axis_tkeep, s_axis_tvalid, s_axis_tlast, s_axis_tid, s_axis_tdest -> s_axis_tready, m_axis_tdata, m_axis_tkeep, m_axis_tvalid, m_axis_tlast, m_axis_tid, m_axis_tdest, m_axis_tuser",
+  "keywords": [
+    "axi_stream",
+    "mux",
+    "multiplexer",
+    "packet_routing",
+    "tdata",
+    "tkeep",
+    "tlast"
+  ],
+  "name": "axis_mux",
+  "project": "rtl",
+  "retrieval_text": "AXI4-Stream multiplexer selecting one of multiple input streams based on control signals. Algorithm: combinational selection using enable and select inputs to route data paths. Structure: multiplexer_datapath, control_logic. Interface: clk, rst, s_axis_tdata, s_axis_tkeep, s_axis_tvalid, s_axis_tlast, s_axis_tid, s_axis_tdest -> s_axis_tready, m_axis_tdata, m_axis_tkeep,",
+  "skill_id": "axis_mux",
+  "structure": [
+    "multiplexer_datapath",
+    "control_logic"
+  ]
+}

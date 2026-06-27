@@ -1,0 +1,40 @@
+{
+  "algorithm": "Token bucket or counter-based rate limiting using configurable numerator and denominator inputs",
+  "core_function": "AXI4-Stream interface rate limiter controlling throughput via numerator and denominator parameters",
+  "dependencies": [],
+  "granularity": "leaf",
+  "interface": {
+    "input": "clk, rst, s_axis_tdata, s_axis_tkeep, s_axis_tvalid, s_axis_tlast, s_axis_tid, s_axis_tdest",
+    "output": "s_axis_tready, m_axis_tdata, m_axis_tkeep, m_axis_tvalid, m_axis_tlast, m_axis_tid, m_axis_tdest, m_axis_tuser"
+  },
+  "keywords": [
+    "axi_stream",
+    "rate_limiter",
+    "throughput_control",
+    "ready_valid",
+    "datapath"
+  ],
+  "name": "axis_rate_limit",
+  "parameters": [
+    "DATA_WIDTH",
+    "KEEP_ENABLE",
+    "KEEP_WIDTH",
+    "LAST_ENABLE",
+    "ID_ENABLE",
+    "ID_WIDTH",
+    "DEST_ENABLE",
+    "DEST_WIDTH",
+    "USER_ENABLE",
+    "USER_WIDTH"
+  ],
+  "project": "rtl",
+  "rtl_files": [
+    "rtl/axis_rate_limit.v"
+  ],
+  "skill_id": "axis_rate_limit",
+  "structure": [
+    "registered_axi4_stream_datapath",
+    "rate_control_logic"
+  ],
+  "used_by": []
+}

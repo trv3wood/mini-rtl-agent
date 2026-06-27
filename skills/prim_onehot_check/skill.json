@@ -1,0 +1,27 @@
+{
+  "algorithm": "combinational logic",
+  "core_function": "Validates one-hot encoded input vector and asserts error if invalid.",
+  "dependencies": [],
+  "granularity": "leaf",
+  "interface": {
+    "input": "clk_i, rst_ni, oh_i, addr_i, en_i",
+    "output": "err_o"
+  },
+  "keywords": [
+    "onehot_check",
+    "validation",
+    "error_detection",
+    "combinational"
+  ],
+  "name": "prim_onehot_check",
+  "parameters": [],
+  "project": "ip",
+  "rtl_files": [
+    "rtl/prim_onehot_check.sv"
+  ],
+  "skill_id": "prim_onehot_check",
+  "structure": [
+    "continuous_assignment"
+  ],
+  "used_by": []
+}

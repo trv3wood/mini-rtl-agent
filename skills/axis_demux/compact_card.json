@@ -1,0 +1,24 @@
+{
+  "algorithm": "Multiplexing data and control signals using index-based selection logic",
+  "core_function": "Routes single AXI4-Stream input to one of multiple outputs based on select signal",
+  "granularity": "leaf",
+  "interface_signature": "clk, rst, s_axis_tdata, s_axis_tkeep, s_axis_tvalid, s_axis_tlast, s_axis_tid, s_axis_tdest -> s_axis_tready, m_axis_tdata, m_axis_tkeep, m_axis_tvalid, m_axis_tlast, m_axis_tid, m_axis_tdest, m_axis_tuser",
+  "keywords": [
+    "demux",
+    "axi_stream",
+    "routing",
+    "multiplexer",
+    "select",
+    "tdata",
+    "tkeep",
+    "tvalid"
+  ],
+  "name": "axis_demux",
+  "project": "rtl",
+  "retrieval_text": "Routes single AXI4-Stream input to one of multiple outputs based on select signal. Algorithm: Multiplexing data and control signals using index-based selection logic. Structure: continuous_assignment_network, index_decoder. Interface: clk, rst, s_axis_tdata, s_axis_tkeep, s_axis_tvalid, s_axis_tlast, s_axis_tid, s_axis_tdest -> s_axis_tready, m_axis_tdata, m_axis_tkeep, m_axis_tvalid,",
+  "skill_id": "axis_demux",
+  "structure": [
+    "continuous_assignment_network",
+    "index_decoder"
+  ]
+}

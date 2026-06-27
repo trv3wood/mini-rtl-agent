@@ -1,0 +1,33 @@
+{
+  "algorithm": "priority_encoding",
+  "core_function": "Fixed priority arbiter selecting highest index request with data forwarding",
+  "dependencies": [],
+  "granularity": "leaf",
+  "interface": {
+    "input": "clk_i, rst_ni, req_i, data_i, ready_i",
+    "output": "gnt_o, idx_o, valid_o, data_o"
+  },
+  "keywords": [
+    "arbiter",
+    "fixed_priority",
+    "round_robin",
+    "handshake",
+    "width_conversion"
+  ],
+  "name": "prim_arbiter_fixed",
+  "parameters": [
+    "N",
+    "DW",
+    "IdxW"
+  ],
+  "project": "ip",
+  "rtl_files": [
+    "rtl/prim_arbiter_fixed.sv"
+  ],
+  "skill_id": "prim_arbiter_fixed",
+  "structure": [
+    "priority_encoder",
+    "registered_grant"
+  ],
+  "used_by": []
+}

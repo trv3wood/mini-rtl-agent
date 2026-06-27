@@ -1,0 +1,22 @@
+{
+  "algorithm": "Replicates data and control signals across M_COUNT outputs with ready-valid handshake",
+  "core_function": "Broadcasts single AXI4-Stream input to multiple parallel output streams",
+  "granularity": "leaf",
+  "interface_signature": "clk, rst, s_axis_tdata, s_axis_tkeep, s_axis_tvalid, s_axis_tlast, s_axis_tid, s_axis_tdest -> s_axis_tready, m_axis_tdata, m_axis_tkeep, m_axis_tvalid, m_axis_tlast, m_axis_tid, m_axis_tdest, m_axis_tuser",
+  "keywords": [
+    "axi_stream",
+    "broadcast",
+    "replication",
+    "ready_valid",
+    "datapath",
+    "multi_output"
+  ],
+  "name": "axis_broadcast",
+  "project": "rtl",
+  "retrieval_text": "Broadcasts single AXI4-Stream input to multiple parallel output streams. Algorithm: Replicates data and control signals across M_COUNT outputs with ready-valid handshake. Structure: registered_datapath, signal_replication_logic. Interface: clk, rst, s_axis_tdata, s_axis_tkeep, s_axis_tvalid, s_axis_tlast, s_axis_tid, s_axis_tdest -> s_axis_tready, m_axis_tdata, m_axis_tkeep, m_axis_tvalid, m_axis_tlast, m_axis_tid,",
+  "skill_id": "axis_broadcast",
+  "structure": [
+    "registered_datapath",
+    "signal_replication_logic"
+  ]
+}

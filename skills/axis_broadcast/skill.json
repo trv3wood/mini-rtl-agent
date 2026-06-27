@@ -1,0 +1,42 @@
+{
+  "algorithm": "Replicates data and control signals across M_COUNT outputs with ready-valid handshake",
+  "core_function": "Broadcasts single AXI4-Stream input to multiple parallel output streams",
+  "dependencies": [],
+  "granularity": "leaf",
+  "interface": {
+    "input": "clk, rst, s_axis_tdata, s_axis_tkeep, s_axis_tvalid, s_axis_tlast, s_axis_tid, s_axis_tdest",
+    "output": "s_axis_tready, m_axis_tdata, m_axis_tkeep, m_axis_tvalid, m_axis_tlast, m_axis_tid, m_axis_tdest, m_axis_tuser"
+  },
+  "keywords": [
+    "axi_stream",
+    "broadcast",
+    "replication",
+    "ready_valid",
+    "datapath",
+    "multi_output"
+  ],
+  "name": "axis_broadcast",
+  "parameters": [
+    "M_COUNT",
+    "DATA_WIDTH",
+    "KEEP_ENABLE",
+    "KEEP_WIDTH",
+    "LAST_ENABLE",
+    "ID_ENABLE",
+    "ID_WIDTH",
+    "DEST_ENABLE",
+    "DEST_WIDTH",
+    "USER_ENABLE",
+    "USER_WIDTH"
+  ],
+  "project": "rtl",
+  "rtl_files": [
+    "rtl/axis_broadcast.v"
+  ],
+  "skill_id": "axis_broadcast",
+  "structure": [
+    "registered_datapath",
+    "signal_replication_logic"
+  ],
+  "used_by": []
+}

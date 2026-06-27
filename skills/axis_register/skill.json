@@ -1,0 +1,43 @@
+{
+  "algorithm": "registered datapath with ready-valid handshake and bubble-free buffering",
+  "core_function": "AXI4-Stream skid buffer register with configurable data and control fields",
+  "dependencies": [],
+  "granularity": "leaf",
+  "interface": {
+    "input": "clk, rst, s_axis_tdata, s_axis_tkeep, s_axis_tvalid, s_axis_tlast, s_axis_tid, s_axis_tdest",
+    "output": "s_axis_tready, m_axis_tdata, m_axis_tkeep, m_axis_tvalid, m_axis_tlast, m_axis_tid, m_axis_tdest, m_axis_tuser"
+  },
+  "keywords": [
+    "axi_stream",
+    "register",
+    "skid_buffer",
+    "ready_valid",
+    "datapath",
+    "configurable_width"
+  ],
+  "name": "axis_register",
+  "parameters": [
+    "DATA_WIDTH",
+    "KEEP_ENABLE",
+    "KEEP_WIDTH",
+    "LAST_ENABLE",
+    "ID_ENABLE",
+    "ID_WIDTH",
+    "DEST_ENABLE",
+    "DEST_WIDTH",
+    "USER_ENABLE",
+    "USER_WIDTH",
+    "REG_TYPE"
+  ],
+  "project": "rtl",
+  "rtl_files": [
+    "rtl/axis_register.v"
+  ],
+  "skill_id": "axis_register",
+  "structure": [
+    "skid_buffer",
+    "datapath_registers",
+    "ready_valid_interface"
+  ],
+  "used_by": []
+}

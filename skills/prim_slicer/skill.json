@@ -1,0 +1,32 @@
+{
+  "algorithm": "Index-based slicing with fractional width support and zero filling",
+  "core_function": "Slices input bitstring into smaller output chunks with zero padding",
+  "dependencies": [],
+  "granularity": "leaf",
+  "interface": {
+    "input": "sel_i, data_i",
+    "output": "data_o"
+  },
+  "keywords": [
+    "slicer",
+    "width_conversion",
+    "bitstring",
+    "zero_padding",
+    "fractional_width"
+  ],
+  "name": "prim_slicer",
+  "parameters": [
+    "InW",
+    "OutW",
+    "IndexW"
+  ],
+  "project": "ip",
+  "rtl_files": [
+    "rtl/prim_slicer.sv"
+  ],
+  "skill_id": "prim_slicer",
+  "structure": [
+    "continuous_assignment_logic"
+  ],
+  "used_by": []
+}

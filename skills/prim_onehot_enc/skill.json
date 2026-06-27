@@ -1,0 +1,27 @@
+{
+  "algorithm": "binary to onehot encoding",
+  "core_function": "Converts a binary integer input into a one-hot encoded output vector.",
+  "dependencies": [],
+  "granularity": "leaf",
+  "interface": {
+    "input": "in_i, en_i",
+    "output": "out_o"
+  },
+  "keywords": [
+    "onehot_encoder",
+    "binary_to_onehot",
+    "width_conversion",
+    "combinational"
+  ],
+  "name": "prim_onehot_enc",
+  "parameters": [],
+  "project": "ip",
+  "rtl_files": [
+    "rtl/prim_onehot_enc.sv"
+  ],
+  "skill_id": "prim_onehot_enc",
+  "structure": [
+    "combinational_logic"
+  ],
+  "used_by": []
+}

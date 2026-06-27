@@ -1,0 +1,21 @@
+{
+  "algorithm": "Pairwise reduction with configurable LSB or MSB high priority selection",
+  "core_function": "Encodes input vector to binary index of highest priority active bit",
+  "granularity": "leaf",
+  "interface_signature": "input_unencoded -> output_valid, output_encoded, output_unencoded",
+  "keywords": [
+    "priority_encoder",
+    "binary_encoding",
+    "valid_flag",
+    "width_conversion",
+    "arbiter_component"
+  ],
+  "name": "priority_encoder",
+  "project": "rtl",
+  "retrieval_text": "Encodes input vector to binary index of highest priority active bit. Algorithm: Pairwise reduction with configurable LSB or MSB high priority selection. Structure: priority_encoder, continuous_assignment_logic. Interface: input_unencoded -> output_valid, output_encoded, output_unencoded.",
+  "skill_id": "priority_encoder",
+  "structure": [
+    "priority_encoder",
+    "continuous_assignment_logic"
+  ]
+}
