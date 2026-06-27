@@ -111,6 +111,17 @@ python3 -m skill_retriever query "design a UART transmitter with ready/valid inp
   --limit 5
 ```
 
+Run semantic user-query cases that intentionally avoid direct skill keywords:
+
+```sh
+.venv/bin/python -m skill_retriever user-benchmark benchmarks/semantic_user_queries.json \
+  --skills-root work/built_skills \
+  --max-cases 1 \
+  --limit 5
+```
+
+Use `--max-cases 1` for a cheap real-LLM smoke. Remove it when you are ready to spend one LLM call per case.
+
 Run deterministic retrieval from an existing query plan:
 
 ```sh

@@ -26,6 +26,10 @@ def build_query_plan(user_query: str, llm) -> QueryPlan:
                     "Return only a JSON object with exactly these fields: intent, positive_terms, "
                     "negative_terms, likely_categories, likely_interfaces, required_features. "
                     "Use short Verilog/RTL retrieval terms from the user request and likely hardware concepts. "
+                    "negative_terms must contain only concepts the user explicitly rejects or excludes; "
+                    "never put a likely target protocol, likely implementation, or inferred skill family in negative_terms. "
+                    "If a request describes an idle-high single-wire byte frame with start/data/stop markers, "
+                    "include UART/uart transmitter terms unless the user explicitly says not UART. "
                     "Do not select a final skill."
                 ),
             },

@@ -66,6 +66,23 @@ def render_benchmark_table(payload: dict) -> str:
     return "\n".join(lines)
 
 
+def render_user_benchmark_table(payload: dict) -> str:
+    metrics = payload["metrics"]
+    lines = [
+        f"cases: {payload['case_count']}  limit: {payload['limit']}",
+        f"hit@1={metrics['hit_at_1']:.3f}  mrr@10={metrics['mrr_at_10']:.3f}  "
+        f"recall@5={metrics['recall_at_5']:.3f}  recall@10={metrics['recall_at_10']:.3f}",
+        "",
+        f"{'case':<34}  {'hit@1':>5}  {'first':>5}  top ranked",
+        "-" * 96,
+    ]
+    for item in payload["cases"]:
+        top = ", ".join(item["ranked_skill_ids"][:5])
+        first = item["first_relevant_rank"] if item["first_relevant_rank"] is not None else "-"
+        lines.append(f"{item['id']:<34}  {item['hit_at_1']:>5.1f}  {first!s:>5}  {top}")
+    return "\n".join(lines)
+
+
 def compact_metrics_line(metrics: dict) -> str:
     return (
         f"compact_cards={int(metrics.get('card_count', 0))}  "
@@ -158,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
     subparsers = parser.add_subparsers(
         dest="command",
         required=True,
-        metavar="{plan,query,search,benchmark}",
+        metavar="{plan,query,search,benchmark,user-benchmark}",
     )
     plan_cmd = subparsers.add_parser("plan", help="Use the configured LLM to turn a user query into query_plan.json.")
     plan_cmd.add_argument("user_query", help="Natural-language RTL request.")
@@ -260,6 +277,16 @@ def main(argv: list[str] | None = None) -> int:
     benchmark.add_argument("--limit", type=int, default=20)
     benchmark.add_argument("--format", choices=("table", "json"), default="table")
 
+    user_benchmark = subparsers.add_parser(
+        "user-benchmark",
+        help="Evaluate user query -> LLM query plan -> retriever on semantic natural-language cases.",
+    )
+    user_benchmark.add_argument("dataset", help="Semantic user-query benchmark JSON path.")
+    user_benchmark.add_argument("--skills-root", default="work/built_skills", help="Directory containing built or curated skill packages.")
+    user_benchmark.add_argument("--limit", type=int, default=10)
+    user_benchmark.add_argument("--max-cases", type=int, help="Run only the first N cases to control LLM cost.")
+    user_benchmark.add_argument("--format", choices=("table", "json"), default="table")
+
     external = subparsers.add_parser(
         "run-skillrouter-query",
         help=argparse.SUPPRESS,
@@ -331,7 +358,7 @@ def main(argv: list[str] | None = None) -> int:
             from src.utils.llm import OpenAICompatibleLLM
 
             plan = build_query_plan(args.user_query, OpenAICompatibleLLM())
-        except (ModuleNotFoundError, RuntimeError) as exc:
+        except Exception as exc:
             print(f"ERROR: {exc}")
             return 1
         payload = plan.to_dict()
@@ -353,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
                 skills_root=Path(args.skills_root),
                 limit=args.limit,
             )
-        except (ModuleNotFoundError, RuntimeError) as exc:
+        except Exception as exc:
             print(f"ERROR: {exc}")
             return 1
         if args.format == "json":
@@ -498,6 +525,26 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(payload, indent=2))
         else:
             print(render_benchmark_table(payload))
+        return 0
+    if args.command == "user-benchmark":
+        try:
+            from src.utils.llm import OpenAICompatibleLLM
+            from .user_benchmark import run_user_query_benchmark
+
+            payload = run_user_query_benchmark(
+                Path(args.dataset),
+                Path(args.skills_root),
+                OpenAICompatibleLLM(),
+                limit=args.limit,
+                max_cases=args.max_cases,
+            )
+        except Exception as exc:
+            print(f"ERROR: {exc}")
+            return 1
+        if args.format == "json":
+            print(json.dumps(payload, indent=2))
+        else:
+            print(render_user_benchmark_table(payload))
         return 0
     if args.command == "compare-skillrouter-query":
         try:

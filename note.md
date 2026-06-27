@@ -69,6 +69,7 @@ The retriever remains deterministic. The LLM is used for query-plan rewriting, H
      - `python3 -m skill_retriever plan "<user query>"`
      - `python3 -m skill_retriever query "<user query>" --skills-root skills`
      - `python3 -m skill_retriever search query_plan.json --skills-root skills`
+     - `.venv/bin/python -m skill_retriever user-benchmark benchmarks/semantic_user_queries.json --skills-root work/built_skills --max-cases 1`
    - The current main path is:
 
 ```text
@@ -80,6 +81,15 @@ user query
 ```
 
 The retriever no longer reads README/module_info/template files on the main path. It scores current `compact_card.json` fields: `core_function`, `algorithm`, `structure`, `keywords`, `retrieval_text`, `interface_signature`, and `granularity`, with additional evidence from query-plan categories/interfaces/features.
+
+`benchmarks/semantic_user_queries.json` contains user requests that intentionally avoid direct skill names and obvious retrieval keywords. It tests the LLM query-plan rewrite layer before deterministic retrieval. The first real-LLM smoke over `work/built_skills` passed after tightening `negative_terms` prompting:
+
+```text
+case: framed_byte_sender_one_wire
+user query avoids: UART, TX, transmitter, ready, valid, busy
+LLM query_plan inferred: uart_tx, serial_transmitter, ready_valid, start_bit, stop_bit
+top-1: uart_tx
+```
 
 External SkillRouter adapter code remains in the repository as an experimental comparison path, but SkillRouter models are not part of the current default workflow.
 
@@ -175,6 +185,7 @@ PATH=/home/zys/mini-rtl-agent/.venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 pytest -
 python3 -m skill_retriever search /tmp/query_plan_uart.json --skills-root skills --limit 3
 python3 -m skill_retriever benchmark benchmarks/router_benchmark.json --skills-root skills --limit 10
 .venv/bin/python -m skill_retriever query "design a UART transmitter with ready valid input and busy output" --skills-root skills --limit 3 --format json
+.venv/bin/python -m skill_retriever user-benchmark benchmarks/semantic_user_queries.json --skills-root work/built_skills --max-cases 1 --limit 5 --format json
 scripts/smoke_external_skill_repos.sh verilog-uart
 python3 -m hdl_agent --help
 iverilog -g2012 -Wall -o /tmp/agent_uart.vvp work/generated/agent_rtl.v
@@ -183,7 +194,7 @@ iverilog -g2012 -Wall -o /tmp/agent_uart.vvp work/generated/agent_rtl.v
 Latest pytest result:
 
 ```text
-90 passed
+91 passed
 ```
 
 Latest compact router benchmark:

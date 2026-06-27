@@ -27,6 +27,7 @@ from src.skill_retriever.skillrouter_export import (
 )
 from src.skill_retriever.skillrouter_import import fuse_rankings, import_skillrouter_results
 from src.skill_retriever.tools import retrieve_rtl_skills_impl, route_rtl_skill_impl
+from src.skill_retriever.user_benchmark import load_user_query_benchmark, run_user_query_benchmark
 from src.skill_retriever.workflow import retrieve_for_user_query
 
 
@@ -42,6 +43,28 @@ def write_query_plan(path: Path, **overrides) -> Path:
     data.update(overrides)
     path.write_text(json.dumps(data), encoding="utf-8")
     return path
+
+
+def write_compact_skill(root: Path, name: str, text: str, *, keywords: list[str] | None = None) -> None:
+    skill_dir = root / name
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "compact_card.json").write_text(
+        json.dumps(
+            {
+                "skill_id": name,
+                "name": name,
+                "core_function": text,
+                "algorithm": text,
+                "structure": keywords or [],
+                "interface_signature": text,
+                "granularity": "primitive",
+                "project": "test",
+                "keywords": keywords or [],
+                "retrieval_text": text,
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 class FakeQueryPlannerLLM:
@@ -61,6 +84,15 @@ class FakeQueryPlannerLLM:
                 "likely_interfaces": ["uart", "ready valid"],
                 "required_features": ["busy", "serial transmit"],
             }
+        elif "single idle-high line" in lowered:
+            payload = {
+                "intent": "UART transmitter",
+                "positive_terms": ["uart", "transmitter", "serial frame", "start bit", "stop bit"],
+                "negative_terms": ["receiver"],
+                "likely_categories": ["serial"],
+                "likely_interfaces": ["uart"],
+                "required_features": ["busy", "frame progress"],
+            }
         elif "fifo" in lowered:
             payload = {
                 "intent": "single clock fifo",
@@ -69,6 +101,69 @@ class FakeQueryPlannerLLM:
                 "likely_categories": ["buffer"],
                 "likely_interfaces": ["fifo"],
                 "required_features": ["single clock"],
+            }
+        elif "elastic storage" in lowered:
+            payload = {
+                "intent": "AXI stream FIFO",
+                "positive_terms": ["axis", "stream", "fifo", "burst", "preserve order"],
+                "negative_terms": ["register slice"],
+                "likely_categories": ["streaming"],
+                "likely_interfaces": ["axis", "fifo"],
+                "required_features": ["flow control", "burst buffering"],
+            }
+        elif "fixed precedence" in lowered:
+            payload = {
+                "intent": "priority encoder",
+                "positive_terms": ["priority", "encoder", "fixed precedence", "winning line", "numeric position"],
+                "negative_terms": [],
+                "likely_categories": ["selection"],
+                "likely_interfaces": ["request"],
+                "required_features": ["encoded output"],
+            }
+        elif "pauses for a cycle" in lowered:
+            payload = {
+                "intent": "AXI stream register skid buffer",
+                "positive_terms": ["axis", "register", "skid", "ready", "valid", "backpressure"],
+                "negative_terms": [],
+                "likely_categories": ["streaming"],
+                "likely_interfaces": ["axis", "ready_valid"],
+                "required_features": ["hold data", "no drop"],
+            }
+        elif "different chunk sizes" in lowered:
+            payload = {
+                "intent": "AXI stream width adapter",
+                "positive_terms": ["axis", "stream", "width", "adapter", "ready", "valid"],
+                "negative_terms": ["fifo", "storage"],
+                "likely_categories": ["streaming"],
+                "likely_interfaces": ["axis", "ready_valid"],
+                "required_features": ["width conversion", "backpressure"],
+            }
+        elif "polynomial residue" in lowered:
+            payload = {
+                "intent": "CRC32 checksum",
+                "positive_terms": ["crc32", "checksum", "polynomial", "residue"],
+                "negative_terms": [],
+                "likely_categories": ["integrity"],
+                "likely_interfaces": ["data"],
+                "required_features": ["polynomial division"],
+            }
+        elif "assert exactly one output line" in lowered:
+            payload = {
+                "intent": "binary to onehot encoder",
+                "positive_terms": ["onehot", "encoder", "binary", "output vector"],
+                "negative_terms": [],
+                "likely_categories": ["encoding"],
+                "likely_interfaces": ["combinational"],
+                "required_features": ["enable"],
+            }
+        elif "hardware tally" in lowered:
+            payload = {
+                "intent": "event counter register",
+                "positive_terms": ["counter", "increment", "write", "clear", "control"],
+                "negative_terms": [],
+                "likely_categories": ["counter"],
+                "likely_interfaces": ["register"],
+                "required_features": ["software read", "event increment"],
             }
         else:
             payload = {
@@ -283,6 +378,75 @@ def test_user_query_workflow_with_fake_llm_multiple_queries() -> None:
     assert len(llm.calls) == len(cases)
 
 
+def test_semantic_user_query_benchmark_with_fake_llm(tmp_path: Path) -> None:
+    skills_root = tmp_path / "built_skills"
+    write_compact_skill(
+        skills_root,
+        "uart_tx",
+        "UART transmitter serial frame start bit stop bit busy frame progress",
+        keywords=["uart", "transmitter", "serial", "frame", "busy"],
+    )
+    write_compact_skill(
+        skills_root,
+        "axis_fifo",
+        "AXI stream FIFO burst buffering flow control preserve order",
+        keywords=["axis", "stream", "fifo", "burst", "flow_control"],
+    )
+    write_compact_skill(
+        skills_root,
+        "priority_encoder",
+        "Priority encoder fixed precedence winning line encoded output numeric position",
+        keywords=["priority", "encoder", "fixed_precedence"],
+    )
+    write_compact_skill(
+        skills_root,
+        "axis_register",
+        "AXI stream register skid buffer ready valid backpressure hold data no drop",
+        keywords=["axis", "register", "skid", "ready", "valid"],
+    )
+    write_compact_skill(
+        skills_root,
+        "axis_adapter",
+        "AXI stream width adapter width conversion backpressure different data widths",
+        keywords=["axis", "adapter", "width", "conversion"],
+    )
+    write_compact_skill(
+        skills_root,
+        "prim_crc32",
+        "CRC32 checksum polynomial residue polynomial division packet integrity",
+        keywords=["crc32", "checksum", "polynomial"],
+    )
+    write_compact_skill(
+        skills_root,
+        "prim_onehot_enc",
+        "Binary to onehot encoder enable output vector exactly one line",
+        keywords=["onehot", "encoder", "binary"],
+    )
+    write_compact_skill(
+        skills_root,
+        "ibex_counter",
+        "Counter increment write clear software read event tally register",
+        keywords=["counter", "increment", "register"],
+    )
+
+    cases = load_user_query_benchmark(Path("benchmarks/semantic_user_queries.json"))
+    assert cases[0].user_query
+    assert "UART" not in cases[0].user_query
+
+    payload = run_user_query_benchmark(
+        Path("benchmarks/semantic_user_queries.json"),
+        skills_root,
+        FakeQueryPlannerLLM(),
+        limit=5,
+    )
+
+    assert payload["case_count"] == len(cases)
+    assert payload["metrics"]["hit_at_1"] == 1.0
+    for case in payload["cases"]:
+        assert case["query_plan"]["positive_terms"]
+        assert case["results"][0]["why_matched"]
+
+
 def test_cli_help_centers_local_query_path() -> None:
     run = subprocess.run(
         ["python3", "-m", "skill_retriever", "--help"],
@@ -293,6 +457,7 @@ def test_cli_help_centers_local_query_path() -> None:
     )
     assert "query" in run.stdout
     assert "search" in run.stdout
+    assert "user-benchmark" in run.stdout
     assert "compact_card" in run.stdout
 
 

@@ -1,0 +1,53 @@
+{
+  "description": "Natural-language user requests that avoid direct skill names and obvious retrieval keywords. These cases test whether the LLM can rewrite intent into a useful query_plan before deterministic compact-card retrieval.",
+  "cases": [
+    {
+      "id": "framed_byte_sender_one_wire",
+      "user_query": "Build a block that accepts bytes from upstream only when it can take them, then drives a single idle-high line with a start marker, the data bits, and an end marker. Expose whether a frame is currently in progress.",
+      "relevant_skill_ids": ["uart_tx"],
+      "notes": "Avoids saying UART, TX, transmitter, ready, valid, or busy directly."
+    },
+    {
+      "id": "same_clock_elastic_storage",
+      "user_query": "I need elastic storage between a streaming producer and consumer. It should absorb bursts, preserve order, and tell each side when transfer can continue.",
+      "relevant_skill_ids": ["axis_fifo"],
+      "notes": "Avoids saying AXI, FIFO, valid, ready, full, or empty directly."
+    },
+    {
+      "id": "fixed_precedence_selector",
+      "user_query": "Several input lines may be asserted at once. Pick the winning line according to a fixed precedence order and also return its numeric position.",
+      "relevant_skill_ids": ["priority_encoder"],
+      "notes": "Avoids saying priority encoder directly."
+    },
+    {
+      "id": "stream_staging_for_pause",
+      "user_query": "When the downstream side pauses for a cycle, keep one transfer stable so no item is dropped or duplicated once the downstream side resumes.",
+      "relevant_skill_ids": ["axis_register"],
+      "notes": "Avoids saying AXI-stream register, ready/valid, skid, or buffer directly."
+    },
+    {
+      "id": "different_chunk_sizes_stream",
+      "user_query": "Connect a streaming producer and consumer that use different chunk sizes while preserving the backpressure handshake and byte ordering.",
+      "relevant_skill_ids": ["axis_adapter"],
+      "notes": "Avoids saying AXI-stream, adapter, or width conversion directly."
+    },
+    {
+      "id": "polynomial_residue_checker",
+      "user_query": "Create combinational logic that updates a 32-bit polynomial residue over incoming data so software can compare a packet integrity value later.",
+      "relevant_skill_ids": ["prim_crc32"],
+      "notes": "Targets OpenTitan built skills under work/built_skills."
+    },
+    {
+      "id": "single_asserted_line_to_index",
+      "user_query": "Given a compact binary number and an enable, assert exactly one output line corresponding to that number.",
+      "relevant_skill_ids": ["prim_onehot_enc"],
+      "notes": "Targets OpenTitan built skills while avoiding the exact onehot encoder name."
+    },
+    {
+      "id": "event_tally_register",
+      "user_query": "Provide a small hardware tally that can increment on events, be read by software, and be cleared or written through control logic.",
+      "relevant_skill_ids": ["ibex_counter"],
+      "notes": "Targets Ibex built skills while avoiding the word counter."
+    }
+  ]
+}
