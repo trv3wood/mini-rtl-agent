@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
 from src.skill_retriever.models import QueryPlan
+from src.skill_retriever.planner import build_query_plan
 from src.skill_retriever.tools import retrieve_rtl_skills
 from src.utils.llm import ChatClient, OpenAICompatibleLLM
 
@@ -17,15 +17,6 @@ from src.utils.llm import ChatClient, OpenAICompatibleLLM
 DEFAULT_SKILLS_ROOT = Path("skills")
 DEFAULT_OUTPUT = Path("work/generated/agent_rtl.v")
 DEFAULT_MAX_RETRIES = 3
-
-
-class QueryPlanOutput(BaseModel):
-    intent: str = Field(min_length=1)
-    positive_terms: list[str]
-    negative_terms: list[str]
-    likely_categories: list[str]
-    likely_interfaces: list[str]
-    required_features: list[str]
 
 
 @dataclass(frozen=True)
@@ -47,26 +38,6 @@ class HDLAgentResult:
     output_path: Path
     syntax_log: str
     repair_attempts: int
-
-
-def build_query_plan(user_request: str, llm: ChatClient) -> QueryPlan:
-    payload = llm.complete_structured(
-        [
-            {
-                "role": "system",
-                "content": (
-                    "You convert natural-language HDL programming requests into query_plan.json. "
-                    "Return only a JSON object with exactly these fields: intent, positive_terms, "
-                    "negative_terms, likely_categories, likely_interfaces, required_features. "
-                    "Use short Verilog/RTL retrieval terms. Do not select a final skill."
-                ),
-            },
-            {"role": "user", "content": user_request},
-        ],
-        QueryPlanOutput,
-        temperature=0.0,
-    )
-    return QueryPlan.from_dict(payload.model_dump())
 
 
 def call_skill_retriever_tool(plan: QueryPlan, skills_root: Path, limit: int) -> dict[str, Any]:

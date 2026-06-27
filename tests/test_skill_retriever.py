@@ -27,6 +27,7 @@ from src.skill_retriever.skillrouter_export import (
 )
 from src.skill_retriever.skillrouter_import import fuse_rankings, import_skillrouter_results
 from src.skill_retriever.tools import retrieve_rtl_skills_impl, route_rtl_skill_impl
+from src.skill_retriever.workflow import retrieve_for_user_query
 
 
 def write_query_plan(path: Path, **overrides) -> Path:
@@ -41,6 +42,47 @@ def write_query_plan(path: Path, **overrides) -> Path:
     data.update(overrides)
     path.write_text(json.dumps(data), encoding="utf-8")
     return path
+
+
+class FakeQueryPlannerLLM:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def complete_structured(self, messages: list[dict[str, str]], schema, *, temperature: float = 0.0):
+        user_query = messages[-1]["content"]
+        self.calls.append(user_query)
+        lowered = user_query.lower()
+        if "uart" in lowered and ("tx" in lowered or "transmit" in lowered):
+            payload = {
+                "intent": "design a UART transmitter",
+                "positive_terms": ["uart", "transmitter", "ready", "valid", "busy"],
+                "negative_terms": ["receiver"],
+                "likely_categories": ["serial"],
+                "likely_interfaces": ["uart", "ready valid"],
+                "required_features": ["busy", "serial transmit"],
+            }
+        elif "fifo" in lowered:
+            payload = {
+                "intent": "single clock fifo",
+                "positive_terms": ["fifo", "full", "empty", "queue"],
+                "negative_terms": ["async"],
+                "likely_categories": ["buffer"],
+                "likely_interfaces": ["fifo"],
+                "required_features": ["single clock"],
+            }
+        else:
+            payload = {
+                "intent": "fair arbiter with acknowledge",
+                "positive_terms": ["fair", "arbiter", "grant", "request", "acknowledge"],
+                "negative_terms": [],
+                "likely_categories": ["control"],
+                "likely_interfaces": ["arbiter"],
+                "required_features": ["round robin", "acknowledge"],
+            }
+        return schema.model_validate(payload)
+
+    def complete_text(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> str:
+        raise AssertionError("skill_retriever query workflow must not request free-form text generation")
 
 
 def test_valid_query_plan_loads(tmp_path: Path) -> None:
@@ -220,6 +262,38 @@ def test_cli_table_and_json_output(tmp_path: Path) -> None:
     payload = json.loads(json_run.stdout)
     assert payload["query_plan"]["intent"] == "fair arbiter with acknowledge"
     assert payload["results"][0]["name"] == "round_robin_arbiter"
+
+
+def test_user_query_workflow_with_fake_llm_multiple_queries() -> None:
+    llm = FakeQueryPlannerLLM()
+    cases = [
+        ("Need a UART TX with ready valid input and busy output", "uart_tx"),
+        ("Need a single clock FIFO with full and empty flags", "sync_fifo"),
+        ("Need a fair arbiter with acknowledge", "round_robin_arbiter"),
+    ]
+
+    for query, expected in cases:
+        payload = retrieve_for_user_query(query, llm, skills_root=Path("skills"), limit=5)
+        assert payload["user_query"] == query
+        assert payload["query_plan"]["intent"]
+        assert payload["results"][0]["name"] == expected
+        assert payload["results"][0]["score"] > 0
+        assert payload["results"][0]["why_matched"]
+
+    assert len(llm.calls) == len(cases)
+
+
+def test_cli_help_centers_local_query_path() -> None:
+    run = subprocess.run(
+        ["python3", "-m", "skill_retriever", "--help"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    )
+    assert "query" in run.stdout
+    assert "search" in run.stdout
+    assert "compact_card" in run.stdout
 
 
 def test_router_response_matches_goal_contract_for_local_ranking(tmp_path: Path) -> None:

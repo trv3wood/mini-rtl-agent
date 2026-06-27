@@ -8,6 +8,7 @@ from .benchmark import run_benchmark
 from .comparison import compare_benchmark_with_external_skillrouter, compare_with_external_skillrouter
 from .external_skillrouter import render_command, run_external_skillrouter_benchmark, run_external_skillrouter_query
 from .models import QueryPlan
+from .planner import build_query_plan
 from .retriever import retrieve_skills
 from .reporting import write_skillrouter_benchmark_reports, write_skillrouter_goal_alignment_report
 from .router_response import build_router_response
@@ -135,9 +136,40 @@ def rank_or_dash(value: object) -> str:
     return "-" if value is None else str(value)
 
 
+def hide_subcommands_from_help(subparsers: argparse._SubParsersAction, names: set[str]) -> None:
+    subparsers._choices_actions = [
+        action for action in subparsers._choices_actions if action.dest not in names
+    ]
+
+
+def query_payload(user_query: str, plan: QueryPlan, results: list) -> dict:
+    return {
+        "user_query": user_query,
+        "query_plan": plan.to_dict(),
+        "results": [result.to_dict() for result in results],
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="skill_retriever", description="Search RTL skills from a query_plan.json.")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    parser = argparse.ArgumentParser(
+        prog="skill_retriever",
+        description="Plan and retrieve RTL skills with local compact_card.json ranking.",
+    )
+    subparsers = parser.add_subparsers(
+        dest="command",
+        required=True,
+        metavar="{plan,query,search,benchmark}",
+    )
+    plan_cmd = subparsers.add_parser("plan", help="Use the configured LLM to turn a user query into query_plan.json.")
+    plan_cmd.add_argument("user_query", help="Natural-language RTL request.")
+    plan_cmd.add_argument("--output", help="Optional path to write query_plan.json.")
+
+    query = subparsers.add_parser("query", help="Run user query -> LLM query plan -> rg retriever -> ranked skills.")
+    query.add_argument("user_query", help="Natural-language RTL request.")
+    query.add_argument("--skills-root", default="skills", help="Directory containing skill packages.")
+    query.add_argument("--format", choices=("table", "json"), default="table")
+    query.add_argument("--limit", type=int, default=10)
+
     search = subparsers.add_parser("search", help="Search skills with a query_plan.json file.")
     search.add_argument("query_plan", help="Path to query_plan.json.")
     search.add_argument("--skills-root", default="skills", help="Directory containing skill packages.")
@@ -156,7 +188,7 @@ def main(argv: list[str] | None = None) -> int:
 
     status = subparsers.add_parser(
         "skillrouter-status",
-        help="Report current implementation alignment with GOAL.md Skill Router targets.",
+        help=argparse.SUPPRESS,
     )
     status.add_argument("--report-md", help="Optional Markdown status report output path.")
     status.add_argument("--report-json", help="Optional JSON status report output path.")
@@ -164,14 +196,14 @@ def main(argv: list[str] | None = None) -> int:
 
     export_pool = subparsers.add_parser(
         "export-skillrouter-pool",
-        help="Export local RTL skills to SkillRouter-compatible JSONL skill pool.",
+        help=argparse.SUPPRESS,
     )
     export_pool.add_argument("--skills-root", default="skills", help="Directory containing skill packages.")
     export_pool.add_argument("--output", required=True, help="Output JSONL path.")
 
     prepare_query = subparsers.add_parser(
         "prepare-skillrouter-query",
-        help="Prepare a local query_plan.json and local skills as a SkillRouter data_root.",
+        help=argparse.SUPPRESS,
     )
     prepare_query.add_argument("query_plan", help="Path to query_plan.json.")
     prepare_query.add_argument("--skills-root", default="skills", help="Directory containing skill packages.")
@@ -181,7 +213,7 @@ def main(argv: list[str] | None = None) -> int:
 
     prepare_benchmark = subparsers.add_parser(
         "prepare-skillrouter-benchmark",
-        help="Prepare a router benchmark as a SkillRouter data_root.",
+        help=argparse.SUPPRESS,
     )
     prepare_benchmark.add_argument("dataset", help="Benchmark JSON path.")
     prepare_benchmark.add_argument("--skills-root", default="skills", help="Directory containing skill packages.")
@@ -190,7 +222,7 @@ def main(argv: list[str] | None = None) -> int:
 
     fuse = subparsers.add_parser(
         "fuse-skillrouter-results",
-        help="Fuse local retriever results with external SkillRouter retrieval JSON.",
+        help=argparse.SUPPRESS,
     )
     fuse.add_argument("query_plan", help="Path to query_plan.json.")
     fuse.add_argument("--skills-root", default="skills", help="Directory containing skill packages.")
@@ -201,7 +233,7 @@ def main(argv: list[str] | None = None) -> int:
 
     compare = subparsers.add_parser(
         "compare-skillrouter-query",
-        help="Compare local retriever, external SkillRouter output, and fused ranking.",
+        help=argparse.SUPPRESS,
     )
     compare.add_argument("query_plan", help="Path to query_plan.json.")
     compare.add_argument("--skills-root", default="skills", help="Directory containing skill packages.")
@@ -212,7 +244,7 @@ def main(argv: list[str] | None = None) -> int:
 
     compare_benchmark = subparsers.add_parser(
         "compare-skillrouter-benchmark",
-        help="Compare local, external SkillRouter, and fused metrics on a router benchmark.",
+        help=argparse.SUPPRESS,
     )
     compare_benchmark.add_argument("dataset", help="Benchmark JSON path.")
     compare_benchmark.add_argument("--skills-root", default="skills", help="Directory containing skill packages.")
@@ -230,7 +262,7 @@ def main(argv: list[str] | None = None) -> int:
 
     external = subparsers.add_parser(
         "run-skillrouter-query",
-        help="Prepare local skills, optionally run external SkillRouter retrieval, and fuse results.",
+        help=argparse.SUPPRESS,
     )
     external.add_argument("query_plan", help="Path to query_plan.json.")
     external.add_argument("--skills-root", default="skills", help="Directory containing skill packages.")
@@ -254,7 +286,7 @@ def main(argv: list[str] | None = None) -> int:
 
     external_benchmark = subparsers.add_parser(
         "run-skillrouter-benchmark",
-        help="Prepare a benchmark, optionally run external SkillRouter, and compare metrics.",
+        help=argparse.SUPPRESS,
     )
     external_benchmark.add_argument("dataset", help="Benchmark JSON path.")
     external_benchmark.add_argument("--skills-root", default="skills", help="Directory containing skill packages.")
@@ -277,7 +309,61 @@ def main(argv: list[str] | None = None) -> int:
     external_benchmark.add_argument("--encoder-batch-size", type=int, default=16)
     external_benchmark.add_argument("--reranker-batch-size", type=int, default=4)
 
+    hide_subcommands_from_help(
+        subparsers,
+        {
+            "skillrouter-status",
+            "route",
+            "export-skillrouter-pool",
+            "prepare-skillrouter-query",
+            "prepare-skillrouter-benchmark",
+            "fuse-skillrouter-results",
+            "compare-skillrouter-query",
+            "compare-skillrouter-benchmark",
+            "run-skillrouter-query",
+            "run-skillrouter-benchmark",
+        },
+    )
+
     args = parser.parse_args(argv)
+    if args.command == "plan":
+        try:
+            from src.utils.llm import OpenAICompatibleLLM
+
+            plan = build_query_plan(args.user_query, OpenAICompatibleLLM())
+        except (ModuleNotFoundError, RuntimeError) as exc:
+            print(f"ERROR: {exc}")
+            return 1
+        payload = plan.to_dict()
+        text = json.dumps(payload, indent=2)
+        if args.output:
+            Path(args.output).write_text(text + "\n", encoding="utf-8")
+            print(f"wrote query_plan: {args.output}")
+        else:
+            print(text)
+        return 0
+    if args.command == "query":
+        try:
+            from .workflow import retrieve_for_user_query
+            from src.utils.llm import OpenAICompatibleLLM
+
+            payload = retrieve_for_user_query(
+                args.user_query,
+                OpenAICompatibleLLM(),
+                skills_root=Path(args.skills_root),
+                limit=args.limit,
+            )
+        except (ModuleNotFoundError, RuntimeError) as exc:
+            print(f"ERROR: {exc}")
+            return 1
+        if args.format == "json":
+            print(json.dumps(payload, indent=2))
+        else:
+            print("query_plan:")
+            print(json.dumps(payload["query_plan"], indent=2))
+            print("")
+            print(render_result_dicts_table(payload["results"]))
+        return 0
     if args.command == "search":
         try:
             plan = load_query_plan(Path(args.query_plan))

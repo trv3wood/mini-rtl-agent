@@ -16,7 +16,7 @@ The repository now has four related flows:
    - Optional clean rebuild: `--clean`.
    - Deterministic RTL frontend with `pyslang` first and regex fallback.
    - Module hierarchy/root/unresolved-dependency reporting.
-   - Default output is the new minimal package format; no LLM call is needed for the default builder path.
+   - Default output is the minimal package format. Semantic annotation uses the shared LLM client when `LLM_*` is configured and falls back to local rules otherwise.
    - Scans `.v`, `.sv`, `.vh`, and `.svh` files.
    - Ignores docs, images, build outputs, generated files, and test outputs.
    - Extracts module names, parameters, ports, nearby comments, simple FSM hints, and common design patterns.
@@ -64,147 +64,24 @@ work/generated/agent_rtl.v
 
 The retriever remains deterministic. The LLM is used for query-plan rewriting, HDL generation, and syntax-error repair only; it does not directly choose the final skill outside the ranked retriever result.
 
-The local deterministic retriever is now compact-card based:
+4. A compact-card skill retriever:
+   - Main CLI commands:
+     - `python3 -m skill_retriever plan "<user query>"`
+     - `python3 -m skill_retriever query "<user query>" --skills-root skills`
+     - `python3 -m skill_retriever search query_plan.json --skills-root skills`
+   - The current main path is:
 
 ```text
-query_plan.json
+user query
+  -> LLM-generated query_plan.json
   -> rg over compact_card.json
-  -> score compact_card plus selected skill.json fields
-  -> return ranked skills with why_matched, penalties, risks, and adaptation_hints
+  -> deterministic compact-card scoring
+  -> selected/ranked skills with score, why_matched, and penalties
 ```
 
-The retriever no longer reads README/module_info/template files on the main path.
+The retriever no longer reads README/module_info/template files on the main path. It scores current `compact_card.json` fields: `core_function`, `algorithm`, `structure`, `keywords`, `retrieval_text`, `interface_signature`, and `granularity`, with additional evidence from query-plan categories/interfaces/features.
 
-It can also export local skills to the JSONL pool format expected by the external SkillRouter project:
-
-```sh
-python3 -m skill_retriever export-skillrouter-pool \
-  --skills-root skills \
-  --output /tmp/local_rtl_skillrouter_pool.jsonl
-```
-
-Current curated export smoke:
-
-```text
-skills/ -> /tmp/local_rtl_skillrouter_pool.jsonl
-records: 14
-fields: skill_id, name, description, body, source_path
-```
-
-It can prepare a local query data root for external SkillRouter embedding retrieval without launching the model:
-
-```sh
-python3 -m skill_retriever prepare-skillrouter-query query_plan.json \
-  --skills-root skills \
-  --output-dir /tmp/local_rtl_skillrouter_query \
-  --tier easy
-```
-
-Latest local query prep smoke:
-
-```text
-query: UART transmitter with ready/valid and busy
-data_root: /tmp/local_rtl_skillrouter_query
-tasks: tasks.jsonl with task_id uart_tx_query
-pool: easy/part-00000.jsonl with 14 local skills
-external command printed: .venv/bin/python -m src.export_retrieval ...
-```
-
-It now also has an optional external SkillRouter adapter:
-
-```sh
-python3 -m skill_retriever run-skillrouter-query query_plan.json \
-  --skills-root skills \
-  --external-root external/SkillRouter \
-  --work-dir work/skillrouter_query \
-  --dry-run
-```
-
-Current adapter behavior:
-
-```text
-dry-run: prepares local SkillRouter data_root and prints the exact external command
-route: returns the GOAL.md-style downstream Agent contract with selected_skill, candidate_skills, adaptations, risks, and source_path
-route_rtl_skill LangChain tool: exposes that same contract to an upstream LLM agent, optionally over fused external SkillRouter JSON
-retrieval mode: runs external/SkillRouter/src.export_retrieval, imports retrieval/<tier>.json, fuses with local ranking
-pipeline mode: runs retrieval first, then scripts/skillrouter_rerank_query.py for unlabeled local reranker inference, imports reranked/<tier>.json, and fuses with local ranking
-use-existing: skips model execution and imports the expected retrieval/<tier>.json or reranked/<tier>.json after a manual run
-compare-skillrouter-query: compares local top-k, raw external top-k, semantic-scored top-k, and fused top-k for report tables
-compare-skillrouter-benchmark: compares local, raw external, semantic-scored, and fused metrics when external task IDs match benchmark case IDs
-run-skillrouter-benchmark: prepares benchmark data, optionally runs external retrieval/rerank, and returns comparison metrics
-```
-
-External retrieval output can now be imported and fused with the local retriever:
-
-```sh
-python3 -m skill_retriever fuse-skillrouter-results query_plan.json \
-  --skills-root skills \
-  --retrieval-json external/SkillRouter/outputs/local_rtl_query/retrieval/easy.json \
-  --task-id local_query \
-  --format json
-```
-
-Fusion output contains:
-
-```text
-lexical_results: local deterministic/spec-aware ranking
-semantic_results: external SkillRouter retrieval JSON mapped back to local skills
-results: fused ranking with external rank evidence in why_matched
-```
-
-Latest fusion smoke used a synthetic external retrieval JSON:
-
-```text
-external ranks: uart_tx, axis_handshake_buffer, uart_rx
-fused top-1: uart_tx
-why_matched includes: external SkillRouter rank 1: uart_tx
-```
-
-Benchmark-level comparison is now available for report tables:
-
-```sh
-make router-benchmark
-make skillrouter-benchmark-dry-run
-
-# run the printed external commands manually from external/SkillRouter
-
-make skillrouter-report-existing
-make skillrouter-status
-```
-
-Underlying commands:
-
-```sh
-python3 -m skill_retriever run-skillrouter-benchmark benchmarks/router_benchmark.json \
-  --skills-root skills \
-  --external-root external/SkillRouter \
-  --work-dir work/skillrouter_benchmark \
-  --mode pipeline \
-  --dry-run
-
-python3 -m skill_retriever run-skillrouter-benchmark benchmarks/router_benchmark.json \
-  --skills-root skills \
-  --external-root external/SkillRouter \
-  --work-dir work/skillrouter_benchmark \
-  --mode pipeline \
-  --use-existing \
-  --report-md work/reports/skillrouter_benchmark.md \
-  --report-json work/reports/skillrouter_benchmark.json \
-  --format json
-
-python3 -m skill_retriever prepare-skillrouter-benchmark benchmarks/router_benchmark.json \
-  --skills-root skills \
-  --output-dir /tmp/local_rtl_skillrouter_benchmark
-
-python3 -m skill_retriever compare-skillrouter-benchmark benchmarks/router_benchmark.json \
-  --skills-root skills \
-  --external-json external/SkillRouter/outputs/local_rtl_benchmark/reranked/easy.json \
-  --format json
-```
-
-It reports local, raw external, semantic-scored, and fused `hit@1`, `mrr@10`, and `recall@5/10/20`. The external JSON must map each benchmark case ID to a ranked skill-id list.
-`work/reports/` is gitignored because these are generated comparison artifacts.
-`make skillrouter-status` writes the current GOAL.md Skill Router alignment report, including explicit boundaries and next steps.
+External SkillRouter adapter code remains in the repository as an experimental comparison path, but SkillRouter models are not part of the current default workflow.
 
 The retriever now has a seed benchmark CLI:
 
@@ -217,7 +94,7 @@ python3 -m skill_retriever benchmark benchmarks/router_benchmark.json \
 Latest seed benchmark result:
 
 ```text
-cases: 12
+cases: 14
 hit@1: 1.000
 mrr@10: 1.000
 recall@5/10/20: 1.000
@@ -295,6 +172,9 @@ The `verilog-uart` batch now keeps only `uart_rx` and `uart_tx`; repeated board-
 ```sh
 make skill-builder-demo
 PATH=/home/zys/mini-rtl-agent/.venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 pytest -q
+python3 -m skill_retriever search /tmp/query_plan_uart.json --skills-root skills --limit 3
+python3 -m skill_retriever benchmark benchmarks/router_benchmark.json --skills-root skills --limit 10
+.venv/bin/python -m skill_retriever query "design a UART transmitter with ready valid input and busy output" --skills-root skills --limit 3 --format json
 scripts/smoke_external_skill_repos.sh verilog-uart
 python3 -m hdl_agent --help
 iverilog -g2012 -Wall -o /tmp/agent_uart.vvp work/generated/agent_rtl.v
@@ -303,7 +183,7 @@ iverilog -g2012 -Wall -o /tmp/agent_uart.vvp work/generated/agent_rtl.v
 Latest pytest result:
 
 ```text
-88 passed
+90 passed
 ```
 
 Latest compact router benchmark:
@@ -316,7 +196,16 @@ json_size_reduction=76.0%
 retrieval_text_avg_reduction=95.8%
 ```
 
-Latest real LLM smoke result from the user:
+Latest real LLM skill retriever smoke result:
+
+```text
+user query: design a UART transmitter with ready valid input and busy output
+query_plan intent: UART transmitter design with ready-valid input and busy output
+retrieved top-3: uart_tx(score=103), uart_rx(score=69), axis_srl_fifo(score=58)
+selected top skill: uart_tx
+```
+
+Latest real LLM HDL agent smoke result from the user:
 
 ```text
 query_plan intent: design a UART transmitter

@@ -15,6 +15,8 @@ STRUCTURED_FIELDS = (
     "structure",
     "keywords",
     "retrieval_text",
+    "interfaces",
+    "category",
 )
 
 
@@ -164,6 +166,21 @@ def score_candidate(candidate: Candidate, plan: QueryPlan) -> RankedSkill:
         if any(needle in text for text in texts.values()):
             score += 12
             why.append(f"required feature matched: {feature}")
+
+    for likely_category in plan.likely_categories:
+        needle = normalize(likely_category)
+        if needle and (needle in normalize(category) or any(needle in text for text in texts.values())):
+            score += 4
+            why.append(f"likely category matched: {likely_category}")
+
+    for interface in plan.likely_interfaces:
+        needle = normalize(interface)
+        if not needle:
+            continue
+        interface_hits = [value for value in interfaces if needle in normalize(value)]
+        if interface_hits:
+            score += 8
+            why.append(f"likely interface matched: {interface}")
 
     for term in plan.negative_terms:
         needle = normalize(term)

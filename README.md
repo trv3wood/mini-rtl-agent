@@ -76,7 +76,13 @@ iverilog -g2012 -Wall -o /tmp/uart_tx.vvp \
 
 ## Skill Retriever
 
-The skill retriever is designed for an LLM agent workflow. The LLM agent rewrites a natural-language request into `query_plan.json`; this repository only performs deterministic retrieval and ranking from that plan.
+The skill retriever main path is intentionally small:
+
+```text
+user query -> LLM-generated query_plan.json -> rg over compact_card.json -> ranked skills with scores and reasons
+```
+
+The LLM is used only to rewrite the user request into `query_plan.json`. Final skill ranking is deterministic and comes from local `compact_card.json` files.
 
 Example `query_plan.json`:
 
@@ -91,7 +97,21 @@ Example `query_plan.json`:
 }
 ```
 
-Run the retriever:
+Generate a query plan with the configured OpenAI-compatible LLM:
+
+```sh
+python3 -m skill_retriever plan "design a UART transmitter with ready/valid input and busy output"
+```
+
+Run the full user-query retrieval path:
+
+```sh
+python3 -m skill_retriever query "design a UART transmitter with ready/valid input and busy output" \
+  --skills-root skills \
+  --limit 5
+```
+
+Run deterministic retrieval from an existing query plan:
 
 ```sh
 python3 -m skill_retriever search query_plan.json
@@ -102,171 +122,18 @@ The retriever:
 
 - Uses `positive_terms` with `ripgrep`.
 - Loads matched `compact_card.json` files from minimal skills.
-- Scores compact retrieval text plus structured fields derived from `skill.json`: interfaces, structure, parameters, keywords, and RTL paths.
+- Scores compact-card fields: `core_function`, `algorithm`, `structure`, `keywords`, `retrieval_text`, `interface_signature`, and `granularity`.
+- Adds evidence from `likely_categories`, `likely_interfaces`, and `required_features`.
 - Penalizes `negative_terms`.
-- Returns deterministic ranked skills with `why_matched` and `penalties`; optional external fusion keeps the same result shape.
+- Returns deterministic ranked skills with `why_matched` and `penalties`.
 
-LangChain integration exposes deterministic tools for an upstream LLM agent:
+LangChain integration exposes the deterministic retriever as an upstream-agent tool:
 
 - `retrieve_rtl_skills`: returns ranked skill results and preserves the original retriever JSON output.
-- `route_rtl_skill`: returns the downstream-agent contract with `selected_skill`, `candidate_skills`, matched capabilities, required adaptations, risks, and `source_path`.
 
-Both tools accept the same query-plan fields plus optional `skills_root` and `limit`. `route_rtl_skill` also accepts optional `external_json` and `task_id` to route over fused external SkillRouter results. Neither tool calls an LLM or lets the model choose the final skill.
+The tool accepts the same query-plan fields plus optional `skills_root` and `limit`. It does not call an LLM or let the model choose the final skill.
 
-Return a downstream-agent router response with `selected_skill`, `candidate_skills`, matched capabilities, adaptations, risks, and source path:
-
-```sh
-python3 -m skill_retriever route query_plan.json \
-  --skills-root skills
-```
-
-If external SkillRouter retrieval/rerank output is available, route over the fused ranking:
-
-```sh
-python3 -m skill_retriever route query_plan.json \
-  --skills-root skills \
-  --external-json external/SkillRouter/outputs/local_rtl_query/reranked/easy.json
-```
-
-Export local skills to a SkillRouter-compatible JSONL pool:
-
-```sh
-python3 -m skill_retriever export-skillrouter-pool \
-  --skills-root skills \
-  --output /tmp/local_rtl_skillrouter_pool.jsonl
-```
-
-Each JSONL record contains `skill_id`, `name`, `description`, `body`, and `source_path`. Skills are exported from `compact_card.json` plus `skill.json`.
-
-Prepare a single `query_plan.json` for external SkillRouter embedding retrieval without running the model:
-
-```sh
-python3 -m skill_retriever prepare-skillrouter-query query_plan.json \
-  --skills-root skills \
-  --output-dir /tmp/local_rtl_skillrouter_query \
-  --tier easy
-```
-
-This writes `tasks.jsonl`, `relevance.json`, `manifest.json`, and `easy/part-00000.jsonl`, then prints the external `src.export_retrieval` command to run from `external/SkillRouter/`.
-
-Use the optional adapter to prepare data and print the exact external command without launching the model:
-
-```sh
-python3 -m skill_retriever run-skillrouter-query query_plan.json \
-  --skills-root skills \
-  --external-root external/SkillRouter \
-  --work-dir work/skillrouter_query \
-  --dry-run
-```
-
-When you are ready to run the external embedding model, remove `--dry-run`. The adapter invokes `external/SkillRouter/src.export_retrieval`, reads `outputs/local_rtl_query/retrieval/easy.json`, and fuses those semantic hits with the local lexical/spec-aware ranking.
-
-To also run the released reranker on the retrieved local candidates, use:
-
-```sh
-python3 -m skill_retriever run-skillrouter-query query_plan.json \
-  --skills-root skills \
-  --external-root external/SkillRouter \
-  --work-dir work/skillrouter_query \
-  --mode pipeline
-```
-
-Pipeline mode runs embedding retrieval first, then invokes `scripts/skillrouter_rerank_query.py` with the external SkillRouter virtualenv. This is separate from the external project's `src.run_open_model_eval` benchmark entrypoint, which expects gold labels.
-
-If you run the printed external command manually, import and fuse the existing output without launching models again:
-
-```sh
-python3 -m skill_retriever run-skillrouter-query query_plan.json \
-  --skills-root skills \
-  --external-root external/SkillRouter \
-  --work-dir work/skillrouter_query \
-  --mode pipeline \
-  --use-existing \
-  --format json
-```
-
-For report-friendly comparison between local lexical/spec-aware retrieval, raw external SkillRouter order, and fused ranking:
-
-```sh
-python3 -m skill_retriever compare-skillrouter-query query_plan.json \
-  --skills-root skills \
-  --external-json external/SkillRouter/outputs/local_rtl_query/reranked/easy.json
-```
-
-For benchmark-level comparison, use an external retrieval/reranked JSON whose task IDs match the benchmark case IDs:
-
-```sh
-make router-benchmark
-make skillrouter-benchmark-dry-run
-
-# run the printed external commands manually from external/SkillRouter
-
-make skillrouter-report-existing
-make skillrouter-status
-```
-
-The `make` targets are intentionally split so model execution stays explicit. Override paths as needed:
-
-```sh
-make skillrouter-report-existing \
-  SKILLROUTER_EXTERNAL_JSON=external/SkillRouter/outputs/local_rtl_benchmark/reranked/easy.json
-```
-
-The underlying command is:
-
-```sh
-python3 -m skill_retriever run-skillrouter-benchmark benchmarks/router_benchmark.json \
-  --skills-root skills \
-  --external-root external/SkillRouter \
-  --work-dir work/skillrouter_benchmark \
-  --mode pipeline \
-  --dry-run
-
-# remove --dry-run to let the adapter launch external retrieval/rerank,
-# or run the printed commands manually and then use --use-existing
-
-python3 -m skill_retriever run-skillrouter-benchmark benchmarks/router_benchmark.json \
-  --skills-root skills \
-  --external-root external/SkillRouter \
-  --work-dir work/skillrouter_benchmark \
-  --mode pipeline \
-  --use-existing \
-  --report-md work/reports/skillrouter_benchmark.md \
-  --report-json work/reports/skillrouter_benchmark.json \
-  --format json
-```
-
-The lower-level manual path is:
-
-```sh
-python3 -m skill_retriever prepare-skillrouter-benchmark benchmarks/router_benchmark.json \
-  --skills-root skills \
-  --output-dir /tmp/local_rtl_skillrouter_benchmark
-
-# then run the printed external src.export_retrieval command from external/SkillRouter
-
-python3 -m skill_retriever compare-skillrouter-benchmark benchmarks/router_benchmark.json \
-  --skills-root skills \
-  --external-json external/SkillRouter/outputs/local_rtl_benchmark/reranked/easy.json \
-  --report-md work/reports/skillrouter_benchmark.md \
-  --format json
-```
-
-This reports local, raw external, semantic-scored, and fused `hit@1`, `mrr@10`, and `recall@5/10/20`.
-Generated report files under `work/reports/` are ignored by git.
-`make skillrouter-status` writes a GOAL.md alignment report that lists implemented router capabilities, boundaries, and next steps.
-
-After external SkillRouter writes `outputs/local_rtl_query/retrieval/easy.json`, fuse that semantic result with the local lexical/spec-aware retriever:
-
-```sh
-python3 -m skill_retriever fuse-skillrouter-results query_plan.json \
-  --skills-root skills \
-  --retrieval-json external/SkillRouter/outputs/local_rtl_query/retrieval/easy.json \
-  --task-id local_query \
-  --format json
-```
-
-The fused JSON contains `lexical_results`, `semantic_results`, and final `results`. Semantic hits include `external SkillRouter rank ...` in `why_matched`.
+External SkillRouter integration code remains in the repository as an experimental comparison path, but it is not part of the current default retriever workflow.
 
 Run the small seed router benchmark:
 
