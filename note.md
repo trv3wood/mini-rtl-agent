@@ -366,3 +366,48 @@ This is enough evidence for the report-level claim that SkillRouter's reranker i
    - Normalize query-plan category/interface values against the known skill taxonomy.
    - Add optional simulation with the selected skill testbench after syntax passes.
    - Write an agent trace artifact alongside `agent_rtl.v` for reports and demos.
+
+## 便签
+下面是 4 张命令便签。
+
+**HDL Agent**
+
+实际版，调用真实 LLM 并录制：
+
+```sh
+RECORD_LLM=demo/cache/custom_priority8.jsonl \
+OUTPUT_DIR=work/generated/custom_priority8 \
+scripts/demo_hdl_agent_artifacts.sh
+```
+
+离线版，使用已录制 JSONL replay：
+
+```sh
+scripts/demo.sh
+```
+
+等价显式写法：
+
+```sh
+REPLAY_LLM=demo/cache/custom_priority8.jsonl \
+OUTPUT_DIR=work/generated/custom_priority8 \
+scripts/demo_hdl_agent_artifacts.sh
+```
+
+**Skill Builder**
+
+实际版，从 `work/built_skills/verilog-axis` 抽取 skill，调用真实 LLM 并录制：
+
+```sh
+RECORD_LLM=demo/cache/skill_builder_verilog_axis.jsonl \
+OUTPUT_DIR=work/generated/skill_builder_axis_recorded \
+scripts/demo_skill_builder_axis.sh
+```
+
+离线版，使用已录制 JSONL replay：
+
+```sh
+REPLAY_LLM=demo/cache/skill_builder_verilog_axis.jsonl \
+OUTPUT_DIR=work/generated/skill_builder_axis_replay \
+scripts/demo_skill_builder_axis.sh
+```
