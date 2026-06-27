@@ -27,6 +27,7 @@ def main(argv: list[str] | None = None) -> int:
             output_path=Path(args.output),
             limit=args.limit,
             max_retries=args.max_retries,
+            log=print,
         )
     except Exception as exc:
         print(f"ERROR: {exc}")

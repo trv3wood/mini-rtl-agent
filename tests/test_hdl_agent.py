@@ -71,6 +71,27 @@ def test_hdl_agent_uses_retriever_and_writes_hdl(tmp_path: Path) -> None:
     assert "```" not in output.read_text(encoding="utf-8")
 
 
+def test_hdl_agent_reports_important_actions(tmp_path: Path) -> None:
+    messages: list[str] = []
+    output = tmp_path / "agent_uart.v"
+
+    run_hdl_agent(
+        "Create a small UART transmitter with ready/valid input and busy output",
+        llm=FakeLLM(),
+        output_path=output,
+        log=messages.append,
+    )
+
+    joined = "\n".join(messages)
+    assert "starting HDL generation workflow" in joined
+    assert "building query_plan" in joined
+    assert "invoking skill retriever tool" in joined
+    assert "selected skill: uart_tx" in joined
+    assert "running iverilog syntax check" in joined
+    assert "syntax check passed" in joined
+    assert "wrote generated RTL" in joined
+
+
 def test_hdl_agent_repairs_syntax_failure_before_writing(tmp_path: Path) -> None:
     llm = RepairFakeLLM()
     output = tmp_path / "agent_uart.v"

@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from src.skill_retriever.models import QueryPlan
 from src.skill_retriever.planner import build_query_plan
@@ -17,6 +17,7 @@ from src.utils.llm import ChatClient, OpenAICompatibleLLM
 DEFAULT_SKILLS_ROOT = Path("skills")
 DEFAULT_OUTPUT = Path("work/generated/agent_rtl.v")
 DEFAULT_MAX_RETRIES = 3
+LogFn = Callable[[str], None]
 
 
 @dataclass(frozen=True)
@@ -169,16 +170,22 @@ def generate_verified_hdl(
     llm: ChatClient,
     *,
     max_retries: int = DEFAULT_MAX_RETRIES,
+    log: LogFn | None = None,
 ) -> tuple[str, str, int]:
+    emit = log or (lambda _message: None)
+    emit(f"[hdl-agent] generating RTL from selected skill: {skill.name}")
     hdl_code = generate_hdl(user_request, plan, skill, llm)
     last_log = ""
     for attempt in range(max_retries + 1):
+        emit(f"[hdl-agent] running iverilog syntax check: attempt {attempt + 1}/{max_retries + 1}")
         check = check_hdl_syntax(hdl_code)
         last_log = check.log
         if check.ok:
+            emit(f"[hdl-agent] syntax check passed: repair_attempts={attempt}")
             return hdl_code, last_log, attempt
         if attempt == max_retries:
             break
+        emit(f"[hdl-agent] syntax check failed; asking LLM to repair RTL: {summarize_log(check.log)}")
         hdl_code = repair_hdl(user_request, plan, skill, hdl_code, check.log, llm)
     raise RuntimeError(
         f"generated HDL failed iverilog syntax check after {max_retries} repair attempt(s):\n{last_log}"
@@ -197,6 +204,15 @@ def strip_markdown_fences(text: str) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
+def summarize_log(log: str, *, max_chars: int = 240) -> str:
+    compact = " ".join(line.strip() for line in log.splitlines() if line.strip())
+    if not compact:
+        return "<no compiler output>"
+    if len(compact) <= max_chars:
+        return compact
+    return compact[: max_chars - 3] + "..."
+
+
 def run_hdl_agent(
     user_request: str,
     *,
@@ -205,23 +221,38 @@ def run_hdl_agent(
     output_path: Path = DEFAULT_OUTPUT,
     limit: int = 3,
     max_retries: int = DEFAULT_MAX_RETRIES,
+    log: LogFn | None = None,
 ) -> HDLAgentResult:
+    emit = log or (lambda _message: None)
+    emit("[hdl-agent] starting HDL generation workflow")
+    emit(f"[hdl-agent] skills_root={skills_root} output={output_path} limit={limit}")
     active_llm = llm or OpenAICompatibleLLM()
+    emit("[hdl-agent] building query_plan from user request")
     plan = build_query_plan(user_request, active_llm)
+    emit(
+        "[hdl-agent] query_plan ready: "
+        f"intent={plan.intent!r} positive_terms={plan.positive_terms}"
+    )
+    emit("[hdl-agent] invoking skill retriever tool")
     retrieved = call_skill_retriever_tool(plan, skills_root, limit)
     results = retrieved.get("results", [])
     if not results:
         raise RuntimeError("skill retriever returned no results")
+    ranked = ", ".join(f"{item['name']}({item['score']})" for item in results[: min(5, len(results))])
+    emit(f"[hdl-agent] retrieved {len(results)} skill candidate(s): {ranked}")
     selected_skill = load_skill_context(results[0])
+    emit(f"[hdl-agent] selected skill: {selected_skill.name} path={selected_skill.path}")
     hdl_code, syntax_log, repair_attempts = generate_verified_hdl(
         user_request,
         plan,
         selected_skill,
         active_llm,
         max_retries=max_retries,
+        log=emit,
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(hdl_code, encoding="utf-8")
+    emit(f"[hdl-agent] wrote generated RTL: {output_path}")
     return HDLAgentResult(
         user_request=user_request,
         query_plan=plan,
