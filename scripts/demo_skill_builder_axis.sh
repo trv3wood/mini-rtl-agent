@@ -6,7 +6,7 @@ INPUT_REPO="${INPUT_REPO:-work/built_skills/verilog-axis}"
 OUTPUT_DIR="${OUTPUT_DIR:-work/generated/skill_builder_axis}"
 RECORD_LLM="${RECORD_LLM:-}"
 REPLAY_LLM="${REPLAY_LLM:-}"
-CANDIDATE_MODE="${CANDIDATE_MODE:-all}"
+CANDIDATE_MODE="${CANDIDATE_MODE:-files}"
 
 if [ -n "$RECORD_LLM" ] && [ -n "$REPLAY_LLM" ]; then
   echo "ERROR: set only one of RECORD_LLM or REPLAY_LLM" >&2

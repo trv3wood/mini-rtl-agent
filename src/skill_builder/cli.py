@@ -29,9 +29,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     build_parser.add_argument(
         "--candidate-mode",
-        choices=("all", "roots"),
-        default="all",
-        help="Select skill candidates: all modules for compatibility, or root modules only.",
+        choices=("files", "all", "roots"),
+        default="files",
+        help="Select skill candidates: one skill per RTL file, all modules, or root modules only.",
     )
     build_parser.add_argument("--record-llm", help="Append LLM calls and raw responses to a JSONL file.")
     build_parser.add_argument("--replay-llm", help="Replay LLM calls from a JSONL file and forbid live LLM calls.")

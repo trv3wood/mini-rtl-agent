@@ -120,6 +120,34 @@ endmodule
     assert module.ports[0].width == "[WIDTH-1:0]"
 
 
+def test_pyslang_extracts_module_with_comment_between_name_and_ports(tmp_path: Path) -> None:
+    rtl = write(
+        tmp_path / "commented_header.v",
+        """
+module commented_header
+// Params
+#(
+    parameter WIDTH = 8
+)
+// Ports
+(
+    input wire clk,
+    input wire [WIDTH-1:0] data_i,
+    output wire valid_o
+);
+endmodule
+""",
+    )
+
+    modules = parse_project([rtl])
+
+    assert [module.name for module in modules] == ["commented_header"]
+    assert modules[0].parse_backend == "pyslang"
+    assert [param.name for param in modules[0].parameters] == ["WIDTH"]
+    assert [port.name for port in modules[0].ports] == ["clk", "data_i", "valid_o"]
+    assert modules[0].ports[1].width == "[WIDTH - 1:0]"
+
+
 def test_parse_module_with_comments(tmp_path: Path) -> None:
     rtl = write(
         tmp_path / "comments.v",
@@ -355,7 +383,7 @@ def test_vendor_primitive_dependency_is_classified(tmp_path: Path) -> None:
 def test_malformed_file_does_not_crash_builder(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     write(repo / "rtl" / "broken.v", "module broken(input wire clk\n")
-    report = build_skill_library(repo, tmp_path / "skills", clean=True)
+    report = build_skill_library(repo, tmp_path / "skills", clean=True, candidate_mode="all")
     assert report["rtl_files_scanned"] == 1
     assert report["modules_extracted"] == 0
     assert report["skills_generated"] == 0
@@ -365,7 +393,7 @@ def test_malformed_file_does_not_crash_builder(tmp_path: Path) -> None:
 def test_sample_repo_golden_output(tmp_path: Path) -> None:
     repo = Path("work/sample_rtl_repo")
     output = tmp_path / "skills"
-    report = build_skill_library(repo, output, clean=True)
+    report = build_skill_library(repo, output, clean=True, candidate_mode="all")
 
     assert report["skills_generated"] == 4
     assert report["package_format"] == "minimal"
@@ -471,7 +499,7 @@ def test_builder_rejects_duplicate_modules_without_stopping(tmp_path: Path) -> N
     write(repo / "rtl" / "ok.v", "module ok(input wire clk); endmodule\n")
 
     output = tmp_path / "skills"
-    report = build_skill_library(repo, output, clean=True)
+    report = build_skill_library(repo, output, clean=True, candidate_mode="all")
 
     assert report["skills_generated"] == 1
     assert report["skills_rejected"] == 2
@@ -496,7 +524,7 @@ endmodule
 """,
     )
 
-    report = build_skill_library(repo, tmp_path / "skills", clean=True)
+    report = build_skill_library(repo, tmp_path / "skills", clean=True, candidate_mode="all")
 
     assert report["skills_generated"] == 0
     assert report["skills_rejected"] == 1
@@ -525,7 +553,7 @@ endmodule
 """,
     )
 
-    report = build_skill_library(repo, tmp_path / "skills", clean=True)
+    report = build_skill_library(repo, tmp_path / "skills", clean=True, candidate_mode="all")
 
     assert report["skills_generated"] == 0
     assert report["skills_rejected"] == 1
@@ -858,6 +886,38 @@ class TestSemanticAnnotation:
         assert report["semantic"]["fallback_count"] == 0
         assert report["semantic"]["total_modules"] == 1
         assert len(report["semantic"]["per_module"]) == 1
+
+    def test_files_mode_generates_one_skill_per_verilog_file(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        write(repo / "defs.v", "`define DEMO_WIDTH 8\n")
+        write(
+            repo / "pipe.v",
+            """
+module pipe_stage
+// Params
+#(
+    parameter WIDTH = 8
+)
+(
+    input wire clk,
+    input wire [WIDTH-1:0] data_i,
+    output wire [WIDTH-1:0] data_o
+);
+assign data_o = data_i;
+endmodule
+""",
+        )
+
+        output = tmp_path / "skills"
+        report = build_skill_library(repo, output, clean=True, candidate_mode="files", annotator=FallbackAnnotator())
+
+        assert report["rtl_files_scanned"] == 2
+        assert report["skills_generated"] == 2
+        assert report["candidate_mode"] == "files"
+        assert sorted(skill["skill_name"] for skill in report["skills"]) == ["defs", "pipe"]
+        defs = json.loads((output / "defs" / "skill.json").read_text())
+        assert defs["name"] == "defs"
+        assert defs["rtl_files"] == ["rtl/defs.v"]
 
     def test_no_api_key_uses_fallback_in_tests(self, tmp_path: Path) -> None:
         """When using FallbackAnnotator (no API key), backend is 'fallback' and llm_used=False."""

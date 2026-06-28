@@ -113,7 +113,7 @@ def _build_file_candidates(
         file_str = str(source_file)
         file_modules = modules_by_file.get(file_str, [])
         if not file_modules:
-            continue
+            file_modules = [_synthetic_file_module(source_file)]
 
         primary = file_modules[0]
         skill_id = sanitize_skill_name(Path(file_str).stem)
@@ -133,11 +133,29 @@ def _build_file_candidates(
     return pairs
 
 
+def _synthetic_file_module(source_file: Path) -> ModuleIR:
+    source_text = source_file.read_text(encoding="utf-8", errors="ignore")
+    name = sanitize_skill_name(source_file.stem)
+    return ModuleIR(
+        name=name,
+        source_file=str(source_file),
+        parse_backend="file_stub",
+        syntax_backend="not_checked",
+        instance_backend="not_checked",
+        parameter_backend="not_checked",
+        port_backend="not_checked",
+        semantic_status="file_level",
+        parse_warnings=["no module declaration extracted; emitted file-level skill for one-file-one-skill mode"],
+        comments=[],
+        source_text=source_text,
+    )
+
+
 def build_skill_library(
     repo_path: Path,
     output_root: Path | None = None,
     clean: bool = False,
-    candidate_mode: str = "all",
+    candidate_mode: str = "files",
     annotator: SkillAnnotator | None = None,
     no_filter: bool = False,
 ) -> dict:
@@ -148,8 +166,10 @@ def build_skill_library(
     if clean:
         clean_output_root(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
-    if candidate_mode not in {"all", "roots"}:
-        raise SkillBuilderError("candidate_mode must be 'all' or 'roots'")
+    if no_filter:
+        candidate_mode = "files"
+    if candidate_mode not in {"all", "roots", "files"}:
+        raise SkillBuilderError("candidate_mode must be 'all', 'roots', or 'files'")
 
     if annotator is None:
         annotator = create_annotator()
@@ -166,7 +186,13 @@ def build_skill_library(
     module_lookup = {(module_ir.name, module_ir.source_file): module_ir for module_ir in module_irs}
     modules_by_source = {module_ir.source_file: module_ir for module_ir in module_irs}
     rejected_candidates: list[dict] = []
-    if no_filter:
+    if candidate_mode == "files":
+        file_candidates = _build_file_candidates(module_irs, rtl_files)
+        for primary_ir, candidate in file_candidates:
+            module = primary_ir.to_module_info()
+            modules.append(module)
+            module_candidate_pairs.append((module, primary_ir, candidate))
+    else:
         candidates = build_skill_candidates(hierarchy, include_internal=candidate_mode == "all")
         for candidate in candidates:
             module_ir = module_lookup.get((candidate.root_module, candidate.root_source))
@@ -194,12 +220,6 @@ def build_skill_library(
             module = module_ir.to_module_info()
             modules.append(module)
             module_candidate_pairs.append((module, module_ir, candidate))
-    else:
-        file_candidates = _build_file_candidates(module_irs, rtl_files)
-        for primary_ir, candidate in file_candidates:
-            module = primary_ir.to_module_info()
-            modules.append(module)
-            module_candidate_pairs.append((module, primary_ir, candidate))
 
     project_name = repo_path.name
 
@@ -287,7 +307,7 @@ def build_skill_library(
     report = {
         "input_repo": str(repo_path),
         "output_root": str(output_root),
-        "candidate_mode": candidate_mode if no_filter else "no_filter",
+        "candidate_mode": candidate_mode,
         "package_format": "minimal",
         "rtl_files_scanned": len(rtl_files),
         "modules_extracted": len(module_irs),
