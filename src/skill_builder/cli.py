@@ -41,6 +41,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Use stable demo metadata for record/replay output.",
     )
     build_parser.add_argument(
+        "--filter",
+        action="store_true",
+        help="Enable quality gate and per-module skill extraction (default: one skill per .v file).",
+    )
+    build_parser.add_argument(
         "--no-color",
         action="store_true",
         help="Disable colored output for terminal recordings.",
@@ -71,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
                 clean=args.clean,
                 candidate_mode=args.candidate_mode,
                 annotator=annotator,
+                no_filter=args.filter,
             )
         except (SkillBuilderError, RuntimeError) as exc:
             print(f"ERROR: {exc}")

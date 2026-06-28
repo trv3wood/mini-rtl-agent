@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 
 from .frontend import get_last_parse_warnings, parse_project
+from .generator import sanitize_skill_name
 from .hierarchy import build_module_hierarchy
 from .hierarchy import build_skill_candidates
 from .hierarchy import module_dependency_graph
@@ -92,12 +93,53 @@ def clean_output_root(output_root: Path) -> None:
             child.unlink()
 
 
+def _build_file_candidates(
+    module_irs: list[ModuleIR],
+    rtl_files: list[Path],
+) -> list[tuple[ModuleIR, SkillCandidate]]:
+    """Build one SkillCandidate per .v file (no-filter mode).
+
+    Groups modules by their source file, then creates a candidate for each
+    file with at least one parsed module.  The skill_id is derived from the
+    file stem and the first (primary) module in the file is used for
+    semantic annotation.
+    """
+    modules_by_file: dict[str, list[ModuleIR]] = {}
+    for ir in module_irs:
+        modules_by_file.setdefault(ir.source_file, []).append(ir)
+
+    pairs: list[tuple[ModuleIR, SkillCandidate]] = []
+    for source_file in sorted(rtl_files):
+        file_str = str(source_file)
+        file_modules = modules_by_file.get(file_str, [])
+        if not file_modules:
+            continue
+
+        primary = file_modules[0]
+        skill_id = sanitize_skill_name(Path(file_str).stem)
+        other_module_names = [m.name for m in file_modules[1:] if m.name != primary.name]
+
+        candidate = SkillCandidate(
+            skill_id=skill_id,
+            root_module=primary.name,
+            root_source=file_str,
+            source_files=[file_str],
+            dependency_modules=other_module_names,
+            candidate_kind="standalone" if not other_module_names else "composite",
+            is_self_contained=True,
+        )
+        pairs.append((primary, candidate))
+
+    return pairs
+
+
 def build_skill_library(
     repo_path: Path,
     output_root: Path | None = None,
     clean: bool = False,
     candidate_mode: str = "all",
     annotator: SkillAnnotator | None = None,
+    no_filter: bool = False,
 ) -> dict:
     repo_path = repo_path.resolve()
     if not repo_path.exists() or not repo_path.is_dir():
@@ -116,7 +158,6 @@ def build_skill_library(
     module_irs = parse_project(rtl_files)
     hierarchy = build_module_hierarchy(module_irs)
     dependency_graph = module_dependency_graph(hierarchy)
-    candidates = build_skill_candidates(hierarchy, include_internal=candidate_mode == "all")
     modules: list[ModuleInfo] = []
     module_candidate_pairs: list[tuple[ModuleInfo, ModuleIR, SkillCandidate]] = []
     parse_warnings = get_last_parse_warnings()
@@ -125,32 +166,40 @@ def build_skill_library(
     module_lookup = {(module_ir.name, module_ir.source_file): module_ir for module_ir in module_irs}
     modules_by_source = {module_ir.source_file: module_ir for module_ir in module_irs}
     rejected_candidates: list[dict] = []
-    for candidate in candidates:
-        module_ir = module_lookup.get((candidate.root_module, candidate.root_source))
-        if module_ir is None:
-            module_ir = hierarchy.modules.get(candidate.root_module)
-        if module_ir is None:
-            rejected_candidates.append({
-                "skill_id": candidate.skill_id,
-                "root_module": candidate.root_module,
-                "reasons": ["root module not found after parsing"],
-                "metrics": {},
-            })
-            continue
-        gate = evaluate_atomic_skill_candidate(candidate, modules_by_source)
-        if not gate.accepted:
-            rejected_candidates.append({
-                "skill_id": candidate.skill_id,
-                "root_module": candidate.root_module,
-                "source_files": candidate.source_files,
-                "candidate_kind": candidate.candidate_kind,
-                "reasons": gate.reasons,
-                "metrics": gate.metrics,
-            })
-            continue
-        module = module_ir.to_module_info()
-        modules.append(module)
-        module_candidate_pairs.append((module, module_ir, candidate))
+    if no_filter:
+        candidates = build_skill_candidates(hierarchy, include_internal=candidate_mode == "all")
+        for candidate in candidates:
+            module_ir = module_lookup.get((candidate.root_module, candidate.root_source))
+            if module_ir is None:
+                module_ir = hierarchy.modules.get(candidate.root_module)
+            if module_ir is None:
+                rejected_candidates.append({
+                    "skill_id": candidate.skill_id,
+                    "root_module": candidate.root_module,
+                    "reasons": ["root module not found after parsing"],
+                    "metrics": {},
+                })
+                continue
+            gate = evaluate_atomic_skill_candidate(candidate, modules_by_source)
+            if not gate.accepted:
+                rejected_candidates.append({
+                    "skill_id": candidate.skill_id,
+                    "root_module": candidate.root_module,
+                    "source_files": candidate.source_files,
+                    "candidate_kind": candidate.candidate_kind,
+                    "reasons": gate.reasons,
+                    "metrics": gate.metrics,
+                })
+                continue
+            module = module_ir.to_module_info()
+            modules.append(module)
+            module_candidate_pairs.append((module, module_ir, candidate))
+    else:
+        file_candidates = _build_file_candidates(module_irs, rtl_files)
+        for primary_ir, candidate in file_candidates:
+            module = primary_ir.to_module_info()
+            modules.append(module)
+            module_candidate_pairs.append((module, primary_ir, candidate))
 
     project_name = repo_path.name
 
@@ -208,7 +257,7 @@ def build_skill_library(
         syntax_backend_counts[module_ir.syntax_backend] = syntax_backend_counts.get(module_ir.syntax_backend, 0) + 1
         instance_backend_counts[module_ir.instance_backend] = instance_backend_counts.get(module_ir.instance_backend, 0) + 1
     candidate_counts = {kind: 0 for kind in ("standalone", "composite", "internal", "unresolved", "cyclic")}
-    for candidate in candidates:
+    for _, _, candidate in module_candidate_pairs:
         candidate_counts[candidate.candidate_kind] = candidate_counts.get(candidate.candidate_kind, 0) + 1
     verification_counts = {
         "source_compile_passed": sum(1 for skill in skills if skill.get("verification", {}).get("source_compile") == "passed"),
@@ -238,7 +287,7 @@ def build_skill_library(
     report = {
         "input_repo": str(repo_path),
         "output_root": str(output_root),
-        "candidate_mode": candidate_mode,
+        "candidate_mode": candidate_mode if no_filter else "no_filter",
         "package_format": "minimal",
         "rtl_files_scanned": len(rtl_files),
         "modules_extracted": len(module_irs),
@@ -263,11 +312,11 @@ def build_skill_library(
             "mermaid_direct": None,
             "mermaid_closure": None,
         },
-        "candidates": {"total": len(candidates), **candidate_counts},
+        "candidates": {"total": len(module_candidate_pairs), **candidate_counts},
         "rejected_candidates": rejected_candidates,
         "dependencies": {
-            "resolved": sum(len(candidate.dependency_modules) for candidate in candidates),
-            "unresolved": sum(len(candidate.unresolved_dependencies) for candidate in candidates),
+            "resolved": sum(len(candidate.dependency_modules) for _, _, candidate in module_candidate_pairs),
+            "unresolved": sum(len(candidate.unresolved_dependencies) for _, _, candidate in module_candidate_pairs),
             "vendor_primitives": sum(1 for issue in dependency_issues if issue.category == "vendor_primitive"),
             "external_libraries": sum(1 for issue in dependency_issues if issue.category == "external_library"),
             "duplicate_modules": hierarchy.duplicate_modules,
