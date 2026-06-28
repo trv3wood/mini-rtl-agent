@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import QueryPlan, RankedSkill
-from .retriever import retrieve_skills
+from .backends.rg_rerank.retriever import retrieve_skills
 
 
 @dataclass(frozen=True)

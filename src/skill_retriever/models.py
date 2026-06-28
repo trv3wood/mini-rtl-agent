@@ -75,6 +75,21 @@ class RankedSkill:
     risks: list[str] = field(default_factory=list)
     adaptation_hints: list[str] = field(default_factory=list)
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "RankedSkill":
+        return cls(
+            name=str(data.get("name", "")),
+            path=str(data.get("path", "")),
+            score=int(data.get("score", 0)),
+            category=str(data.get("category", "")),
+            interfaces=[str(item) for item in data.get("interfaces", [])],
+            patterns=[str(item) for item in data.get("patterns", [])],
+            why_matched=[str(item) for item in data.get("why_matched", [])],
+            penalties=[str(item) for item in data.get("penalties", [])],
+            risks=[str(item) for item in data.get("risks", [])],
+            adaptation_hints=[str(item) for item in data.get("adaptation_hints", [])],
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,

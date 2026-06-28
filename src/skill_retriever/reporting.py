@@ -88,22 +88,22 @@ def skillrouter_goal_alignment_payload() -> dict[str, Any]:
             {
                 "requirement": "Retrieve flattened Skill Spec text rather than raw RTL",
                 "current_state": "Local exporter flattens compact_card.json plus skill.json into SkillRouter JSONL records.",
-                "artifacts": ["src/skill_retriever/skillrouter_export.py"],
+                "artifacts": ["src/skill_retriever/backends/skillrouter/export.py"],
             },
             {
                 "requirement": "Use paper SkillRouter embedding retriever",
                 "current_state": "Optional adapter prepares local data_root and can invoke external/SkillRouter/src.export_retrieval when explicitly requested.",
-                "artifacts": ["src/skill_retriever/external_skillrouter.py", "external/SkillRouter/"],
+                "artifacts": ["src/skill_retriever/backends/skillrouter/external.py", "external/SkillRouter/"],
             },
             {
                 "requirement": "Use paper SkillRouter reranker",
                 "current_state": "Pipeline mode invokes scripts/skillrouter_rerank_query.py over retrieved local candidates using the external SkillRouter virtualenv.",
-                "artifacts": ["scripts/skillrouter_rerank_query.py", "src/skill_retriever/external_skillrouter.py"],
+                "artifacts": ["scripts/skillrouter_rerank_query.py", "src/skill_retriever/backends/skillrouter/external.py"],
             },
             {
                 "requirement": "Combine embedding Top-K and lexical Top-K before final routing",
                 "current_state": "External semantic results are imported and fused with deterministic lexical/spec-aware ranking.",
-                "artifacts": ["src/skill_retriever/skillrouter_import.py", "src/skill_retriever/comparison.py"],
+                "artifacts": ["src/skill_retriever/backends/skillrouter/import_results.py", "src/skill_retriever/comparison.py"],
             },
             {
                 "requirement": "Return candidate RTL skills with basis, risk, and adaptation advice",

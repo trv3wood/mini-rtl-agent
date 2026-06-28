@@ -146,11 +146,24 @@ Recent external-library builder results with the atomic gates:
 ```text
 natural language request
   -> LLM-generated query_plan.json
-  -> deterministic rg/scoring over compact_card.json
+  -> retriever backend
   -> ranked skills with reasons
 ```
 
 The retriever itself only accepts structured query plans. Natural-language rewriting is upstream LLM-agent responsibility.
+
+Backend layout:
+
+```text
+src/skill_retriever/backends/rg_rerank/
+  Local default backend: rg over compact_card.json plus deterministic scoring.
+
+src/skill_retriever/backends/skillrouter/
+  Optional adapter for external/SkillRouter: export local skills, run or import
+  embedding/reranker results, then fuse them with local ranking.
+```
+
+The legacy top-level modules `retriever.py`, `skillrouter_export.py`, `skillrouter_import.py`, and `external_skillrouter.py` remain as compatibility wrappers.
 
 Required `query_plan.json` schema:
 
@@ -191,6 +204,29 @@ Run deterministic retrieval from an existing plan:
   --skills-root skills \
   --format json
 ```
+
+Run the optional external SkillRouter 0.6B backend:
+
+```sh
+.venv/bin/python -m skill_retriever search query_plan.json \
+  --skills-root skills \
+  --backend skillrouter \
+  --skillrouter-mode pipeline \
+  --external-root external/SkillRouter \
+  --work-dir work/skillrouter_query \
+  --output-dir outputs/local_rtl_query
+```
+
+Use `--dry-run` first to prepare the local SkillRouter data root and print the exact external commands without loading the models:
+
+```sh
+.venv/bin/python -m skill_retriever search query_plan.json \
+  --skills-root skills \
+  --backend skillrouter \
+  --dry-run
+```
+
+`--skillrouter-mode retrieval` runs only the embedding model; `pipeline` runs embedding retrieval plus the 0.6B reranker.
 
 Table output:
 
@@ -331,6 +367,14 @@ This path is still a demo surface, not a replacement for the builder/retriever e
 ## External SkillRouter Boundary
 
 `external/SkillRouter/` is an ignored third-party research project used only for optional comparison. It is not required for the default builder or retriever commands.
+
+Current completion status:
+
+- Upstream SkillRouter quickstart has been run locally with GPU on easy and hard tiers.
+- The released 0.6B embedding and reranker scripts are usable through the optional backend adapter.
+- Local RTL skills can be exported to SkillRouter JSONL data roots.
+- External retrieval/rerank JSON can be imported and fused with the local rg+rerank backend.
+- It is not the default runtime path because model execution is slow, GPU-dependent, and requires separate downloaded weights/data.
 
 ## Test
 

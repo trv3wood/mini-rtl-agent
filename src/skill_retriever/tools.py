@@ -4,9 +4,9 @@ from pathlib import Path
 from typing import Any
 
 from .models import QueryPlan
-from .retriever import retrieve_skills
+from .backends.rg_rerank.retriever import retrieve_skills
+from .backends.skillrouter.import_results import fuse_rankings, import_skillrouter_results
 from .router_response import build_router_response
-from .skillrouter_import import fuse_rankings, import_skillrouter_results
 
 
 def retrieve_rtl_skills_impl(

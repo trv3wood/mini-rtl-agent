@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import QueryPlan, RankedSkill
-from .retriever import flatten
+from .backends.rg_rerank.retriever import flatten
 
 
 def build_router_response(

@@ -4,9 +4,14 @@ from pathlib import Path
 from typing import Any
 
 from .benchmark import aggregate, evaluate_ranked_ids, load_benchmark
+from .backends.rg_rerank.retriever import retrieve_skills
+from .backends.skillrouter.import_results import (
+    fused_payload,
+    fuse_rankings,
+    import_skillrouter_results,
+    load_skillrouter_ids,
+)
 from .models import QueryPlan, RankedSkill
-from .retriever import retrieve_skills
-from .skillrouter_import import fused_payload, fuse_rankings, import_skillrouter_results, load_skillrouter_ids
 
 
 def name_list(results: list[RankedSkill]) -> list[str]:

@@ -18,6 +18,7 @@ wheels/
 work/built_skills/
 work/external_skills/
 work/reports/
+work/skillrouter_*/
 
 # Demo recordings and LLM replay caches
 demo/cache/

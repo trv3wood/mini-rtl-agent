@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .planner import build_query_plan
-from .retriever import retrieve_skills
+from .backends.rg_rerank.retriever import retrieve_skills
 
 
 def retrieve_for_user_query(

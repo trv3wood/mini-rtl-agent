@@ -381,6 +381,75 @@ def test_cli_table_and_json_output(tmp_path: Path) -> None:
     assert payload["results"][0]["name"] == "round_robin_arbiter"
 
 
+def test_cli_search_skillrouter_backend_dry_run_outputs_json(tmp_path: Path) -> None:
+    external_root = tmp_path / "SkillRouter"
+    external_root.mkdir()
+    query_plan = write_query_plan(tmp_path / "query_plan.json")
+    run = subprocess.run(
+        [
+            "python3",
+            "-m",
+            "skill_retriever",
+            "search",
+            str(query_plan),
+            "--skills-root",
+            "skills",
+            "--backend",
+            "skillrouter",
+            "--external-root",
+            str(external_root),
+            "--work-dir",
+            str(tmp_path / "skillrouter_data"),
+            "--dry-run",
+            "--format",
+            "json",
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    )
+
+    payload = json.loads(run.stdout)
+    assert payload["dry_run"] is True
+    assert payload["mode"] == "pipeline"
+    assert len(payload["commands"]) == 2
+    assert payload["commands"][0][1:3] == ["-m", "src.export_retrieval"]
+    assert payload["commands"][1][1].endswith("scripts/skillrouter_rerank_query.py")
+
+
+def test_cli_search_skillrouter_backend_dry_run_outputs_table(tmp_path: Path) -> None:
+    external_root = tmp_path / "SkillRouter"
+    external_root.mkdir()
+    query_plan = write_query_plan(tmp_path / "query_plan.json")
+    run = subprocess.run(
+        [
+            "python3",
+            "-m",
+            "skill_retriever",
+            "search",
+            str(query_plan),
+            "--skills-root",
+            "skills",
+            "--backend",
+            "skillrouter",
+            "--external-root",
+            str(external_root),
+            "--work-dir",
+            str(tmp_path / "skillrouter_data"),
+            "--dry-run",
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    )
+
+    assert "prepared SkillRouter query data" in run.stdout
+    assert "src.export_retrieval" in run.stdout
+    assert "skillrouter_rerank_query.py" in run.stdout
+
+
 def test_user_query_workflow_with_fake_llm_multiple_queries() -> None:
     llm = FakeQueryPlannerLLM()
     cases = [

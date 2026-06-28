@@ -5,20 +5,24 @@ import json
 from pathlib import Path
 
 from .benchmark import run_benchmark
-from .comparison import compare_benchmark_with_external_skillrouter, compare_with_external_skillrouter
-from .external_skillrouter import render_command, run_external_skillrouter_benchmark, run_external_skillrouter_query
-from .models import QueryPlan
-from .planner import build_query_plan
-from .retriever import retrieve_skills
-from .reporting import write_skillrouter_benchmark_reports, write_skillrouter_goal_alignment_report
-from .router_response import build_router_response
-from .skillrouter_export import (
+from .backends.rg_rerank.retriever import retrieve_skills
+from .backends.skillrouter.export import (
     export_skillrouter_records,
     prepare_skillrouter_benchmark_data,
     prepare_skillrouter_query_data,
     write_jsonl,
 )
-from .skillrouter_import import fused_payload, fuse_rankings, import_skillrouter_results
+from .backends.skillrouter.external import (
+    render_command,
+    run_external_skillrouter_benchmark,
+    run_external_skillrouter_query,
+)
+from .backends.skillrouter.import_results import fused_payload, fuse_rankings, import_skillrouter_results
+from .comparison import compare_benchmark_with_external_skillrouter, compare_with_external_skillrouter
+from .models import QueryPlan, RankedSkill
+from .planner import build_query_plan
+from .reporting import write_skillrouter_benchmark_reports, write_skillrouter_goal_alignment_report
+from .router_response import build_router_response
 
 
 def load_query_plan(path: Path) -> QueryPlan:
@@ -192,6 +196,27 @@ def main(argv: list[str] | None = None) -> int:
     search.add_argument("--skills-root", default="skills", help="Directory containing skill packages.")
     search.add_argument("--format", choices=("table", "json"), default="table")
     search.add_argument("--limit", type=int, default=10)
+    search.add_argument(
+        "--backend",
+        choices=("rg", "skillrouter"),
+        default="rg",
+        help="Retrieval backend. Default rg is local deterministic search; skillrouter invokes the external 0.6B models.",
+    )
+    search.add_argument("--external-root", default="external/SkillRouter", help="External SkillRouter checkout for --backend skillrouter.")
+    search.add_argument("--work-dir", default="work/skillrouter_query", help="Prepared SkillRouter data_root for --backend skillrouter.")
+    search.add_argument("--output-dir", default="outputs/local_rtl_query", help="Output dir relative to external root for --backend skillrouter.")
+    search.add_argument("--task-id", default="local_query", help="Task id for prepared SkillRouter query.")
+    search.add_argument("--tier", choices=("easy", "hard"), default="easy", help="SkillRouter tier directory to use.")
+    search.add_argument("--skillrouter-mode", choices=("retrieval", "pipeline"), default="pipeline", help="Use embedding-only retrieval or embedding+reranker pipeline.")
+    search.add_argument("--dry-run", action="store_true", help="With --backend skillrouter, prepare data and print commands without running models.")
+    search.add_argument("--use-existing", action="store_true", help="With --backend skillrouter, import the expected output without running models.")
+    search.add_argument("--top-k", type=int, default=20, help="SkillRouter first-stage retrieval top-k.")
+    search.add_argument("--encoder-model", default="pipizhao/SkillRouter-Embedding-0.6B")
+    search.add_argument("--reranker-model", default="pipizhao/SkillRouter-Reranker-0.6B")
+    search.add_argument("--encoder-max-length", type=int, default=1024)
+    search.add_argument("--reranker-max-length", type=int, default=1024)
+    search.add_argument("--encoder-batch-size", type=int, default=16)
+    search.add_argument("--reranker-batch-size", type=int, default=4)
 
     route = subparsers.add_parser(
         "route",
@@ -394,14 +419,55 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "search":
         try:
             plan = load_query_plan(Path(args.query_plan))
-            results = retrieve_skills(plan, Path(args.skills_root), limit=args.limit)
+            if args.backend == "rg":
+                results = retrieve_skills(plan, Path(args.skills_root), limit=args.limit)
+                payload = result_payload(plan, results)
+            else:
+                payload = run_external_skillrouter_query(
+                    plan,
+                    skills_root=Path(args.skills_root),
+                    external_root=Path(args.external_root),
+                    work_dir=Path(args.work_dir),
+                    output_dir=args.output_dir,
+                    task_id=args.task_id,
+                    tier=args.tier,
+                    mode=args.skillrouter_mode,
+                    limit=args.limit,
+                    dry_run=args.dry_run,
+                    use_existing=args.use_existing,
+                    encoder_model=args.encoder_model,
+                    reranker_model=args.reranker_model,
+                    top_k=args.top_k,
+                    encoder_max_length=args.encoder_max_length,
+                    reranker_max_length=args.reranker_max_length,
+                    encoder_batch_size=args.encoder_batch_size,
+                    reranker_batch_size=args.reranker_batch_size,
+                )
+                results = [
+                    RankedSkill.from_dict(item)
+                    for item in payload.get("fused", {}).get("results", [])
+                ]
         except ValueError as exc:
             print(f"ERROR: {exc}")
             return 1
+        except Exception as exc:
+            print(f"ERROR: {exc}")
+            return 1
         if args.format == "json":
-            print(json.dumps(result_payload(plan, results), indent=2))
+            print(json.dumps(payload, indent=2))
         else:
-            print(render_table(results))
+            if args.backend == "skillrouter" and args.dry_run:
+                print("prepared SkillRouter query data")
+                print(f"expected_result: {payload['expected_result']}")
+                print("commands:")
+                for command in payload["commands"]:
+                    print(render_command(command))
+            elif args.backend == "skillrouter" and payload.get("status") not in {None, "ok"}:
+                print(f"SkillRouter status: {payload.get('status')}")
+                if payload.get("stderr"):
+                    print(payload["stderr"])
+            else:
+                print(render_table(results))
         return 0
     if args.command == "route":
         try:
